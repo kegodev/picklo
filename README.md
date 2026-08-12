@@ -4,7 +4,7 @@
 
 ### A general AI assistant that now feels like a real conversation.
 
-<img src="https://img.shields.io/badge/Release-V4.0.0-6C5CE7?style=for-the-badge" alt="V4">
+<img src="https://img.shields.io/badge/Release-V4.1.0-6C5CE7?style=for-the-badge" alt="V4">
 <img src="https://img.shields.io/badge/UX-Chat_First-17224A?style=for-the-badge" alt="Chat first">
 <img src="https://img.shields.io/badge/Engine-WebLLM-5367E8?style=for-the-badge" alt="WebLLM">
 <img src="https://img.shields.io/badge/Inference-WebGPU-42A875?style=for-the-badge" alt="WebGPU">
@@ -18,7 +18,7 @@
 
 ---
 
-# Picklo V4
+# Picklo V4.1
 
 **V4 is the conversation release.**
 
@@ -27,6 +27,29 @@ V3 established Picklo's identity, response modes, persistent memory and local do
 > **Talk to Picklo.**
 
 The interface is intentionally closer to a real messaging system and further away from an AI control panel.
+
+
+## V4.1 layout fix
+
+V4.1 fixes long-conversation scrolling behavior.
+
+The application viewport is now locked so the conversation history becomes the **only scrolling region**:
+
+```text
+┌────────────────────────────────────┐
+│ Picklo header          FIXED       │
+├────────────────────────────────────┤
+│                                    │
+│                                    │
+│ Conversation history     ↕ SCROLL  │
+│                                    │
+│                                    │
+├────────────────────────────────────┤
+│ Message composer         FIXED     │
+└────────────────────────────────────┘
+```
+
+This applies on both desktop and mobile. Long messages no longer push the header or typing area off-screen.
 
 ## V4 UX redesign
 
@@ -224,7 +247,7 @@ Those require a controlled tool architecture rather than UI-only changes.
 
 <img src="assets/picklo-mark.svg" alt="Picklo" width="74">
 
-### Picklo V4
+### Picklo V4.1
 
 **The engine stays local. The product now feels conversational.**
 

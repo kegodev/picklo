@@ -1,7 +1,7 @@
 {
-  "name": "Picklo V4",
+  "name": "Picklo V4.1",
   "short_name": "Picklo",
-  "description": "A local-first general AI assistant with a refined chat-first interface.",
+  "description": "Picklo V4.1 \u2014 a local-first general AI assistant with a fixed chat header and composer.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

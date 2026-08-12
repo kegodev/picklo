@@ -1,6 +1,6 @@
 import * as webllm from "https://esm.run/@mlc-ai/web-llm";
 
-const APP_VERSION = "4.0.0";
+const APP_VERSION = "4.1.0";
 const STORAGE_KEY = "picklo-v4-state";
 const V3_STORAGE_KEY = "picklo-v3-state";
 const FILE_DB = "picklo-v3-files";
@@ -23,7 +23,7 @@ const MODE_PROMPTS = {
 };
 
 const BASE_SYSTEM_PROMPT = `
-You are Picklo V4, a general-purpose personal AI assistant that runs locally in the user's browser.
+You are Picklo V4.1, a general-purpose personal AI assistant that runs locally in the user's browser.
 You are useful for questions, writing, coding, planning, brainstorming, explanations, decision support and document analysis.
 Do not claim to be ChatGPT or OpenAI. When asked who you are, say you are Picklo.
 
@@ -697,7 +697,7 @@ async function loadSelectedModel() {
   if (!("gpu" in navigator)) {
     setRuntime("WebGPU unavailable", "Use a WebGPU-capable browser", "error");
     closeSheets();
-    addError("WebGPU is unavailable in this browser. Picklo V4 needs a recent WebGPU-capable browser for local inference.");
+    addError("WebGPU is unavailable in this browser. Picklo V4.1 needs a recent WebGPU-capable browser for local inference.");
     return;
   }
 
@@ -1263,7 +1263,7 @@ async function exportData() {
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
-  link.download = `picklo-v4-backup-${new Date().toISOString().slice(0, 10)}.json`;
+  link.download = `picklo-v4.1-backup-${new Date().toISOString().slice(0, 10)}.json`;
   document.body.appendChild(link);
   link.click();
   link.remove();
@@ -1280,7 +1280,7 @@ async function importData(event) {
     const importedState = parsed.state || parsed;
 
     if (!Array.isArray(importedState.chats) || !Array.isArray(importedState.memories)) {
-      throw new Error("This is not a valid Picklo V4 backup.");
+      throw new Error("This is not a valid Picklo V4.1 backup.");
     }
 
     if (!confirm("Replace this browser's current Picklo data with the imported backup?")) return;
