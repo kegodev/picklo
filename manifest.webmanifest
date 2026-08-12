@@ -1,0 +1,18 @@
+{
+  "name": "Picklo V2",
+  "short_name": "Picklo",
+  "description": "Picklo \u2014 a local-first browser AI with saved chats and persistent memory.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#080808",
+  "theme_color": "#080808",
+  "icons": [
+    {
+      "src": "app-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}
