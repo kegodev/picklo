@@ -1,12 +1,12 @@
 *{box-sizing:border-box}
 :root{
-  --bg:#f4f2ef;
-  --surface:#fbfaf8;
-  --surface-2:#f6f4f1;
+  --bg:#ffffff;
+  --surface:#ffffff;
+  --surface-2:#f7f7f7;
   --surface-3:#ffffff;
-  --sidebar:#f0ede9;
-  --border:#e2ddd7;
-  --border-strong:#d6d0c9;
+  --sidebar:#ffffff;
+  --border:#e7e7e7;
+  --border-strong:#dcdcdc;
   --text:#262938;
   --muted:#85828d;
   --muted-2:#a39fa7;
@@ -91,7 +91,7 @@ svg{display:block;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:
 
 .chat-shell{min-width:0;min-height:0;height:100%;max-height:100vh;overflow:hidden;display:grid;grid-template-rows:auto auto minmax(0,1fr) auto auto;background:var(--surface);position:relative}
 .chat-header{
-  position:sticky;top:0;min-height:70px;flex:0 0 auto;border-bottom:1px solid var(--border);padding:10px 18px;display:flex;align-items:center;justify-content:space-between;gap:14px;background:rgba(251,250,248,.96);backdrop-filter:blur(16px);z-index:30
+  position:sticky;top:0;min-height:70px;flex:0 0 auto;border-bottom:1px solid var(--border);padding:10px 18px;display:flex;align-items:center;justify-content:space-between;gap:14px;background:rgba(255,255,255,.97);backdrop-filter:blur(16px);z-index:30
 }
 .header-left,.header-right{display:flex;align-items:center;gap:9px;min-width:0}
 .header-left{flex:1}
@@ -164,7 +164,7 @@ svg{display:block;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:
 .context-icon svg{width:11px;height:11px}
 .context-banner button{border:0;background:transparent;color:#9186bf;font-size:6.5px}
 
-.composer{position:sticky;bottom:0;z-index:30;flex:0 0 auto;padding:0 18px 14px;background:linear-gradient(to top,var(--surface) 88%,rgba(251,250,248,.95));box-shadow:0 -8px 24px rgba(52,43,80,.025)}
+.composer{position:sticky;bottom:0;z-index:30;flex:0 0 auto;padding:0 18px 14px;background:linear-gradient(to top,var(--surface) 88%,rgba(255,255,255,.96));box-shadow:0 -8px 24px rgba(52,43,80,.025)}
 .quick-actions{width:min(760px,100%);margin:0 auto 7px;display:flex;gap:5px;overflow-x:auto;scrollbar-width:none}.quick-actions::-webkit-scrollbar{display:none}
 .quick-actions button{flex:0 0 auto;border:1px solid #dcd5f5;border-radius:999px;background:#fff;color:#6d60b3;padding:5px 9px;font-size:7px;font-weight:750}
 .quick-actions button:hover{background:#f7f4ff}
@@ -244,4 +244,424 @@ svg{display:block;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:
   .message-avatar{width:26px;height:26px}
   .message-bubble{font-size:9.7px}
   .data-grid{grid-template-columns:1fr}
+}
+
+/* =========================================================
+   Picklo V4.1.1 — Composer visibility / long-chat layout fix
+   Only .messages is allowed to consume flexible height.
+   ========================================================= */
+
+html,
+body {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  max-height: 100%;
+  overflow: hidden;
+}
+
+.app {
+  width: 100%;
+  height: 100vh;
+  min-height: 0;
+  max-height: 100vh;
+  overflow: hidden;
+}
+
+/* Use flex instead of grid for the vertical chat stack.
+   This prevents the message viewport from pushing the composer away. */
+.chat-shell {
+  display: flex !important;
+  flex-direction: column;
+  width: 100%;
+  height: 100vh;
+  min-width: 0;
+  min-height: 0;
+  max-height: 100vh;
+  overflow: hidden;
+}
+
+/* Header always occupies its own non-scrolling row. */
+.chat-header {
+  position: relative !important;
+  top: auto !important;
+  flex: 0 0 auto;
+  width: 100%;
+  z-index: 30;
+}
+
+/* Optional model-loading bar also consumes only its natural height. */
+.loading-strip {
+  flex: 0 0 auto;
+  width: 100%;
+}
+
+/* THIS is the only flexible and vertically scrollable region. */
+.messages {
+  flex: 1 1 0 !important;
+  width: 100%;
+  height: auto !important;
+  min-height: 0 !important;
+  max-height: none;
+  overflow-y: auto !important;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* File context remains directly above the composer. */
+.context-banner {
+  position: relative !important;
+  flex: 0 0 auto;
+  z-index: 25;
+}
+
+/* Composer is a normal non-scrolling flex row at the bottom.
+   No sticky positioning is necessary when the parent itself cannot scroll. */
+.composer {
+  position: relative !important;
+  bottom: auto !important;
+  flex: 0 0 auto;
+  width: 100%;
+  z-index: 30;
+  background: var(--surface);
+}
+
+/* Prevent textarea growth from increasing the whole app past the viewport. */
+.composer-box {
+  flex: 0 0 auto;
+}
+
+.composer textarea {
+  max-height: min(150px, 22vh);
+  overflow-y: auto;
+}
+
+@media (max-width: 820px) {
+  html,
+  body,
+  .app,
+  .chat-shell {
+    width: 100%;
+    height: 100dvh !important;
+    min-height: 0 !important;
+    max-height: 100dvh !important;
+    overflow: hidden !important;
+  }
+
+  .messages {
+    flex: 1 1 0 !important;
+    min-height: 0 !important;
+    height: auto !important;
+  }
+
+  .composer {
+    flex: 0 0 auto;
+    padding-bottom: max(10px, env(safe-area-inset-bottom));
+  }
+
+  .composer textarea {
+    max-height: min(120px, 20dvh);
+  }
+}
+
+
+/* =========================================================
+   Picklo V4.2.2 — White light mode + true black dark mode
+   ========================================================= */
+
+:root {
+  color-scheme: light;
+}
+
+html[data-theme="dark"] {
+  color-scheme: dark;
+}
+
+/* Header appearance toggle */
+.theme-toggle {
+  width: 34px;
+  height: 34px;
+  flex: 0 0 auto;
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  background: var(--surface-3);
+  color: #6e6a75;
+  display: grid;
+  place-items: center;
+  padding: 0;
+}
+
+.theme-toggle:hover {
+  color: var(--navy);
+  border-color: var(--border-strong);
+}
+
+.theme-toggle svg {
+  width: 16px;
+  height: 16px;
+}
+
+.theme-toggle .sun-icon {
+  display: none;
+}
+
+html[data-theme="dark"] .theme-toggle .moon-icon {
+  display: none;
+}
+
+html[data-theme="dark"] .theme-toggle .sun-icon {
+  display: block;
+}
+
+/* True-black theme tokens */
+html[data-theme="dark"] {
+  --bg: #000000;
+  --surface: #000000;
+  --surface-2: #080808;
+  --surface-3: #0c0c0c;
+  --sidebar: #050505;
+  --border: #202020;
+  --border-strong: #303030;
+  --text: #f3f3f3;
+  --muted: #8e8e96;
+  --muted-2: #696970;
+  --navy: #f6f6f7;
+  --purple: #8877ff;
+  --purple-2: #9688ff;
+  --purple-soft: #201b42;
+  --green: #57c98b;
+  --danger: #e16f69;
+  --shadow: none;
+}
+
+html[data-theme="dark"],
+html[data-theme="dark"] body,
+html[data-theme="dark"] .app,
+html[data-theme="dark"] .chat-shell,
+html[data-theme="dark"] .messages,
+html[data-theme="dark"] .composer {
+  background-color: #000000;
+}
+
+html[data-theme="dark"] body {
+  color: var(--text);
+}
+
+html[data-theme="dark"] .sidebar {
+  background: #050505;
+  border-color: #202020;
+}
+
+html[data-theme="dark"] .chat-header {
+  background: rgba(0,0,0,.96);
+  border-color: #202020;
+}
+
+html[data-theme="dark"] .brand,
+html[data-theme="dark"] .chat-title-line h1,
+html[data-theme="dark"] .welcome h2,
+html[data-theme="dark"] .sheet-header h2,
+html[data-theme="dark"] .mode-list strong {
+  color: #f6f6f7;
+}
+
+html[data-theme="dark"] .conversation-search,
+html[data-theme="dark"] .sidebar-new,
+html[data-theme="dark"] .header-new,
+html[data-theme="dark"] .header-more,
+html[data-theme="dark"] .mode-pill,
+html[data-theme="dark"] .theme-toggle,
+html[data-theme="dark"] .composer-box,
+html[data-theme="dark"] .starter-grid button,
+html[data-theme="dark"] .quick-actions button,
+html[data-theme="dark"] .select-field,
+html[data-theme="dark"] .sheet-textarea,
+html[data-theme="dark"] .file-item,
+html[data-theme="dark"] .memory-item,
+html[data-theme="dark"] .data-grid button,
+html[data-theme="dark"] .data-grid label,
+html[data-theme="dark"] .mode-list button,
+html[data-theme="dark"] .secondary-action {
+  background: #0c0c0c;
+  border-color: #282828;
+  color: #eeeeef;
+}
+
+html[data-theme="dark"] .conversation-search input,
+html[data-theme="dark"] .composer textarea,
+html[data-theme="dark"] .sheet-textarea,
+html[data-theme="dark"] .select-field {
+  color: #f3f3f3;
+}
+
+html[data-theme="dark"] .conversation-search input::placeholder,
+html[data-theme="dark"] .composer textarea::placeholder,
+html[data-theme="dark"] .sheet-textarea::placeholder {
+  color: #6e6e75;
+}
+
+html[data-theme="dark"] .chat-item:hover,
+html[data-theme="dark"] .sidebar-tool:hover {
+  background: #0b0b0b;
+}
+
+html[data-theme="dark"] .chat-item.active {
+  background: #101010;
+  box-shadow: none;
+}
+
+html[data-theme="dark"] .chat-primary,
+html[data-theme="dark"] .sidebar-tool strong,
+html[data-theme="dark"] .file-copy strong,
+html[data-theme="dark"] .memory-item p {
+  color: #dedee2;
+}
+
+html[data-theme="dark"] .chat-secondary,
+html[data-theme="dark"] .sidebar-tool small,
+html[data-theme="dark"] .runtime small,
+html[data-theme="dark"] .composer-footer,
+html[data-theme="dark"] .chat-status,
+html[data-theme="dark"] .starter-copy span {
+  color: #777780;
+}
+
+html[data-theme="dark"] .message-bubble {
+  background: #111111;
+  color: #e8e8eb;
+}
+
+html[data-theme="dark"] .user .message-bubble {
+  background: linear-gradient(145deg,#7767e7,#6554dd);
+  color: #ffffff;
+}
+
+html[data-theme="dark"] .message-bubble h1,
+html[data-theme="dark"] .message-bubble h2,
+html[data-theme="dark"] .message-bubble h3 {
+  color: #f5f5f7;
+}
+
+html[data-theme="dark"] .message-bubble code:not(pre code) {
+  background: #222222;
+  color: #eeeeef;
+}
+
+html[data-theme="dark"] .code-block {
+  background: #090909;
+  border-color: #292929;
+}
+
+html[data-theme="dark"] .code-head {
+  border-color: #242424;
+  color: #777780;
+}
+
+html[data-theme="dark"] .copy-code {
+  background: #171717;
+  color: #9b9ba3;
+}
+
+html[data-theme="dark"] .context-banner {
+  background: #111023;
+  border-color: #302967;
+  color: #a99eff;
+}
+
+html[data-theme="dark"] .context-icon {
+  background: #1d183c;
+}
+
+html[data-theme="dark"] .loading-strip {
+  background: #080808;
+  border-color: #202020;
+}
+
+html[data-theme="dark"] .progress-track {
+  background: #202020;
+}
+
+html[data-theme="dark"] .sheet {
+  background: #080808;
+  border-color: #262626;
+  box-shadow: 0 35px 110px rgba(0,0,0,.7);
+}
+
+html[data-theme="dark"] .sheet-header {
+  border-color: #202020;
+}
+
+html[data-theme="dark"] .sheet-close {
+  background: #151515;
+  color: #9a9aa1;
+}
+
+html[data-theme="dark"] .primary-action {
+  background: #f0f0f2;
+  color: #080808;
+}
+
+html[data-theme="dark"] .primary-action:hover {
+  background: #ffffff;
+}
+
+html[data-theme="dark"] .sidebar-footer {
+  border-color: #202020;
+}
+
+html[data-theme="dark"] .tool-icon.file-tool {
+  background: #0d1b2e;
+}
+
+html[data-theme="dark"] .tool-icon.memory-tool {
+  background: #10261b;
+}
+
+html[data-theme="dark"] .tool-icon.settings-tool {
+  background: #2a1d0d;
+}
+
+html[data-theme="dark"] .version {
+  background: #201b42;
+  color: #a99eff;
+}
+
+html[data-theme="dark"] .starter-icon.ask-icon {
+  background: #201b42;
+}
+
+html[data-theme="dark"] .starter-icon.write-icon {
+  background: #10261b;
+}
+
+html[data-theme="dark"] .starter-icon.code-icon {
+  background: #0d1b2e;
+}
+
+html[data-theme="dark"] .starter-icon.analyze-icon {
+  background: #2a1d0d;
+}
+
+html[data-theme="dark"] .backdrop {
+  background: rgba(0,0,0,.72);
+}
+
+html[data-theme="dark"] .mobile-tools {
+  border-color: #202020;
+}
+
+html[data-theme="dark"] .mobile-tools button {
+  color: #dedee2;
+}
+
+html[data-theme="dark"] .mobile-tools button:hover {
+  background: #111111;
+}
+
+@media (max-width: 820px) {
+  .theme-toggle {
+    width: 32px;
+    height: 32px;
+  }
 }

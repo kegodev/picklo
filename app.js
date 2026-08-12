@@ -1,6 +1,6 @@
 import * as webllm from "https://esm.run/@mlc-ai/web-llm";
 
-const APP_VERSION = "4.1.0";
+const APP_VERSION = "4.2.2";
 const STORAGE_KEY = "picklo-v4-state";
 const V3_STORAGE_KEY = "picklo-v3-state";
 const FILE_DB = "picklo-v3-files";
@@ -23,7 +23,7 @@ const MODE_PROMPTS = {
 };
 
 const BASE_SYSTEM_PROMPT = `
-You are Picklo V4.1, a general-purpose personal AI assistant that runs locally in the user's browser.
+You are Picklo V4.2.2, a general-purpose personal AI assistant that runs locally in the user's browser.
 You are useful for questions, writing, coding, planning, brainstorming, explanations, decision support and document analysis.
 Do not claim to be ChatGPT or OpenAI. When asked who you are, say you are Picklo.
 
@@ -44,6 +44,7 @@ const defaultState = () => ({
   selectedModel: "Llama-3.2-1B-Instruct-q4f16_1-MLC",
   activeMode: "general",
   defaultMode: "general",
+  theme: "light",
   memories: [],
   chats: []
 });
@@ -128,15 +129,19 @@ const chatSearchInput = $("chatSearchInput");
 const headerChatTitle = $("headerChatTitle");
 const headerNewChatBtn = $("headerNewChatBtn");
 const sidebarModelText = $("sidebarModelText");
+const themeToggleBtn = $("themeToggleBtn");
+const themeSelect = $("themeSelect");
 
 boot();
 
 async function boot() {
+  applyTheme(state.theme || "light", false);
   populateModels();
   ensureActiveChat();
   localFiles = await listLocalFiles();
   bindEvents();
   defaultModeSelect.value = state.defaultMode || "general";
+  themeSelect.value = state.theme || "light";
   setMode(state.activeMode || state.defaultMode || "general", false);
   renderAll();
 
@@ -226,6 +231,15 @@ function bindEvents() {
     saveState();
   });
 
+  themeToggleBtn.addEventListener("click", () => {
+    const next = (state.theme || "light") === "dark" ? "light" : "dark";
+    applyTheme(next, true);
+  });
+
+  themeSelect.addEventListener("change", () => {
+    applyTheme(themeSelect.value, true);
+  });
+
   loadModelBtn.addEventListener("click", loadSelectedModel);
 
   chatForm.addEventListener("submit", async (event) => {
@@ -308,6 +322,30 @@ function bindEvents() {
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape") closeSheets();
   });
+}
+
+function applyTheme(theme, persist = true) {
+  const normalized = theme === "dark" ? "dark" : "light";
+  state.theme = normalized;
+
+  document.documentElement.dataset.theme = normalized;
+
+  if (themeSelect) {
+    themeSelect.value = normalized;
+  }
+
+  if (themeToggleBtn) {
+    const dark = normalized === "dark";
+    themeToggleBtn.setAttribute(
+      "aria-label",
+      dark ? "Switch to light mode" : "Switch to dark mode"
+    );
+    themeToggleBtn.title = dark ? "Light mode" : "Dark mode";
+  }
+
+  if (persist) {
+    saveState();
+  }
 }
 
 function loadState() {
@@ -1263,7 +1301,7 @@ async function exportData() {
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
-  link.download = `picklo-v4.1-backup-${new Date().toISOString().slice(0, 10)}.json`;
+  link.download = `picklo-v4.2.2-backup-${new Date().toISOString().slice(0, 10)}.json`;
   document.body.appendChild(link);
   link.click();
   link.remove();
@@ -1280,7 +1318,7 @@ async function importData(event) {
     const importedState = parsed.state || parsed;
 
     if (!Array.isArray(importedState.chats) || !Array.isArray(importedState.memories)) {
-      throw new Error("This is not a valid Picklo V4.1 backup.");
+      throw new Error("This is not a valid Picklo V4.2.2 backup.");
     }
 
     if (!confirm("Replace this browser's current Picklo data with the imported backup?")) return;

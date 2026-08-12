@@ -1,12 +1,12 @@
 {
-  "name": "Picklo V4.1",
+  "name": "Picklo V4.2.2",
   "short_name": "Picklo",
-  "description": "Picklo V4.1 \u2014 a local-first general AI assistant with a fixed chat header and composer.",
+  "description": "Picklo V4.2.2 \u2014 a local-first general AI assistant with white light mode and true black dark mode.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
-  "background_color": "#fbfaf8",
-  "theme_color": "#fbfaf8",
+  "background_color": "#ffffff",
+  "theme_color": "#ffffff",
   "icons": [
     {
       "src": "assets/picklo-mark.svg",

@@ -18,7 +18,7 @@
 
 ---
 
-# Picklo V4.1
+# Picklo V4.2.2
 
 **V4 is the conversation release.**
 
@@ -29,7 +29,23 @@ V3 established Picklo's identity, response modes, persistent memory and local do
 The interface is intentionally closer to a real messaging system and further away from an AI control panel.
 
 
-## V4.1 layout fix
+## V4.2.2 appearance update
+
+### V4.1.1 correction
+
+V4.1.1 replaces the previous sticky/grid solution with a stricter flex layout.
+
+```text
+.chat-shell
+├── header        flex: 0 0 auto
+├── loading bar   flex: 0 0 auto
+├── messages      flex: 1 1 0   ← ONLY scrolling region
+├── file context  flex: 0 0 auto
+└── composer      flex: 0 0 auto
+```
+
+This prevents long conversations from consuming the space reserved for the message composer.
+
 
 V4.1 fixes long-conversation scrolling behavior.
 
@@ -50,6 +66,37 @@ The application viewport is now locked so the conversation history becomes the *
 ```
 
 This applies on both desktop and mobile. Long messages no longer push the header or typing area off-screen.
+
+
+## V4.2.2 appearance update
+
+Picklo now ships with two deliberate visual themes:
+
+### Light
+
+The default interface now uses a **true white background** rather than the previous cream/off-white palette.
+
+```text
+Background   #FFFFFF
+Chat         #FFFFFF
+Sidebar      #FFFFFF
+Cards        #FFFFFF / subtle grey borders
+```
+
+### Dark
+
+Dark mode uses a **true black foundation**, not dark grey.
+
+```text
+Background   #000000
+Chat         #000000
+Sidebar      #050505
+Surfaces     #0C0C0C
+Borders      #202020
+Text         #F3F3F3
+```
+
+The theme can be changed from the moon/sun control in the chat header or from **Settings → Appearance**. The selected theme is persisted with Picklo's local state.
 
 ## V4 UX redesign
 
@@ -247,7 +294,7 @@ Those require a controlled tool architecture rather than UI-only changes.
 
 <img src="assets/picklo-mark.svg" alt="Picklo" width="74">
 
-### Picklo V4.1
+### Picklo V4.2.2
 
 **The engine stays local. The product now feels conversational.**
 
