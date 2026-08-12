@@ -3,215 +3,300 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <meta name="theme-color" content="#080808" />
-  <meta name="color-scheme" content="dark" />
-  <meta
-    name="description"
-    content="Picklo V2 — a local-first browser AI with persistent memory, saved chats and selectable open models."
-  />
-  <title>Picklo V2</title>
+  <meta name="theme-color" content="#F6F3EE" />
+  <meta name="description" content="Picklo V3 — a local-first general AI assistant for thinking, writing, coding, planning and file analysis." />
+  <title>Picklo V3</title>
+  <link rel="icon" href="assets/picklo-mark.svg" type="image/svg+xml" />
   <link rel="manifest" href="manifest.webmanifest" />
-  <link rel="icon" href="app-icon.svg" type="image/svg+xml" />
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
   <div class="app-shell">
-    <aside class="sidebar" id="sidebar">
-      <div class="sidebar-top">
-        <div class="brand-row">
-          <div class="brand-mark">AI</div>
-          <div class="brand-copy">
-            <strong>Picklo</strong>
-            <span>Version 2</span>
-          </div>
-          <button class="icon-button sidebar-close" id="sidebarCloseBtn" type="button" aria-label="Close sidebar">×</button>
-        </div>
 
-        <button class="new-chat-button" id="newChatBtn" type="button">
-          <span class="plus">+</span>
-          <span>New chat</span>
+    <aside class="sidebar desktop-only">
+      <div class="side-top">
+        <a class="brand" href="#" aria-label="Picklo home">
+          <img src="assets/picklo-mark.svg" alt="" />
+          <div><strong>Picklo</strong><span>Personal AI</span></div>
+        </a>
+
+        <button class="new-chat" id="newChatBtn" type="button">
+          <span>+</span>
+          New chat
         </button>
 
-        <div class="sidebar-section">
-          <div class="section-heading">
-            <span>Chats</span>
-            <button class="tiny-button" id="clearChatsBtn" type="button" title="Delete all chats">Clear</button>
-          </div>
-          <div class="chat-list" id="chatList"></div>
+        <div class="side-heading">
+          <span>Conversations</span>
+          <button id="clearChatsBtn" type="button">Clear</button>
         </div>
+
+        <div class="chat-list" id="chatList"></div>
       </div>
 
-      <div class="sidebar-bottom">
-        <button class="utility-button" id="memoryBtn" type="button">
-          <span>Memory</span>
-          <small id="memoryCount">0 saved</small>
+      <div class="side-bottom">
+        <button class="side-row" id="memoryBtn" type="button">
+          <span class="side-icon memory-icon">M</span>
+          <span><strong>Memory</strong><small id="memoryCount">0 saved</small></span>
+          <b>›</b>
         </button>
 
-        <button class="utility-button" id="dataBtn" type="button">
-          <span>Data</span>
-          <small>Export / import</small>
+        <button class="side-row" id="filesBtn" type="button">
+          <span class="side-icon files-icon">F</span>
+          <span><strong>Files</strong><small id="fileCount">0 local files</small></span>
+          <b>›</b>
         </button>
 
-        <div class="runtime-card">
-          <span class="status-dot" id="statusDot"></span>
+        <button class="side-row" id="settingsBtn" type="button">
+          <span class="side-icon settings-icon">S</span>
+          <span><strong>Settings</strong><small>Model & preferences</small></span>
+          <b>›</b>
+        </button>
+
+        <div class="local-state">
+          <span class="state-dot" id="stateDot"></span>
           <div>
-            <strong id="runtimeStatus">AI offline</strong>
-            <small id="runtimeDetail">Choose a model and load it</small>
+            <strong id="stateTitle">Picklo is offline</strong>
+            <small id="stateDetail">Start a local model when ready</small>
           </div>
         </div>
       </div>
     </aside>
 
-    <main class="main-panel">
-      <header class="topbar">
-        <button class="icon-button menu-button" id="menuBtn" type="button" aria-label="Open sidebar">
+    <main class="chat-app">
+      <header class="assistant-header">
+        <button class="mobile-menu mobile-only" id="mobileMenuBtn" type="button" aria-label="Open conversations">
           <span></span><span></span><span></span>
         </button>
 
-        <div class="topbar-title">
-          <strong id="activeChatTitle">New chat</strong>
-          <span id="topbarStatus">Local-first AI</span>
+        <div class="assistant-identity">
+          <div class="avatar">
+            <img src="assets/picklo-mark.svg" alt="Picklo" />
+            <span class="presence" id="presence"></span>
+          </div>
+          <div class="identity-copy">
+            <div class="identity-title">
+              <h1>Picklo</h1>
+              <span>V3</span>
+            </div>
+            <p id="assistantSubtitle">Your general-purpose personal AI</p>
+            <div class="identity-status">
+              <span id="modelStatus">Local model not started</span>
+              <i>•</i>
+              <b>Private</b>
+            </div>
+          </div>
         </div>
 
-        <div class="topbar-actions">
-          <label class="model-select-wrap" for="modelSelect">
-            <span>Model</span>
-            <select id="modelSelect" aria-label="Choose AI model"></select>
-          </label>
-          <button class="primary-button" id="loadModelBtn" type="button">Load AI</button>
+        <div class="header-actions">
+          <button class="mode-button" id="modeButton" type="button">General</button>
+          <button class="start-button" id="startButton" type="button">Start Picklo</button>
         </div>
       </header>
 
-      <div class="load-progress hidden" id="progressWrap" aria-live="polite">
-        <div class="load-progress-row">
-          <span id="progressText">Preparing model…</span>
-          <span id="progressPercent">0%</span>
-        </div>
-        <div class="progress-track">
-          <div class="progress-bar" id="progressBar"></div>
-        </div>
+      <div class="loading-strip hidden" id="progressWrap">
+        <div><span id="progressText">Preparing Picklo…</span><strong id="progressPercent">0%</strong></div>
+        <div class="progress-track"><div class="progress-bar" id="progressBar"></div></div>
       </div>
 
       <section class="messages" id="messages" aria-live="polite"></section>
 
-      <form class="composer" id="chatForm">
-        <div class="composer-inner">
-          <textarea
-            id="messageInput"
-            rows="1"
-            maxlength="12000"
-            placeholder="Load a model to start chatting…"
-            disabled
-          ></textarea>
+      <div class="context-banner hidden" id="contextBanner">
+        <div>
+          <span class="context-mark">F</span>
+          <span id="contextText">Using local files</span>
+        </div>
+        <button id="clearContextBtn" type="button">Clear</button>
+      </div>
 
-          <div class="composer-actions">
-            <span class="local-badge">LOCAL</span>
-            <button class="stop-button hidden" id="stopBtn" type="button">Stop</button>
-            <button class="send-button" id="sendBtn" type="submit" disabled aria-label="Send message">↑</button>
-          </div>
+      <form class="composer" id="chatForm">
+        <div class="quick-actions" id="quickActions">
+          <button type="button" data-followup="Explain that more simply and keep only the essential points.">Simplify</button>
+          <button type="button" data-followup="Give me a concrete example of what you just explained.">Give an example</button>
+          <button type="button" data-followup="Go deeper. Explain the important details and tradeoffs I should understand.">Go deeper</button>
+          <button type="button" data-followup="Turn that into a clear step-by-step action plan.">Make it steps</button>
         </div>
 
-        <div class="composer-meta">
+        <div class="composer-box">
+          <label class="attach" for="fileInput" title="Add local files">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 12 6.6-6.6a3 3 0 1 1 4.2 4.2l-9.2 9.2a5 5 0 0 1-7.1-7.1l9-9"/></svg>
+            <input id="fileInput" type="file" multiple hidden accept=".pdf,.txt,.md,.markdown,.csv,.json,.html,.css,.js,.ts,.jsx,.tsx,.py,.xml,.yaml,.yml,text/*,application/json,application/pdf" />
+          </label>
+
+          <textarea id="messageInput" rows="1" maxlength="16000" placeholder="Start Picklo to send a message…" disabled></textarea>
+
+          <button class="stop-button hidden" id="stopBtn" type="button">Stop</button>
+
+          <button class="send-button" id="sendBtn" type="submit" disabled aria-label="Send">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 12 6-6 6 6M12 6v12"/></svg>
+          </button>
+        </div>
+
+        <div class="composer-note">
+          <span id="composerNote">Chats, memory and files stay in this browser.</span>
           <span>Shift + Enter for a new line</span>
-          <span id="storageStatus">Chats and memory stay in this browser</span>
         </div>
       </form>
+
+      <nav class="mobile-nav mobile-only" aria-label="Picklo navigation">
+        <button class="active" type="button" data-mobile-action="chat">
+          <span class="nav-glyph">C</span><span>Chat</span>
+        </button>
+        <button type="button" data-mobile-action="files">
+          <span class="nav-glyph">F</span><span>Files</span>
+        </button>
+        <button type="button" data-mobile-action="memory">
+          <span class="nav-glyph">M</span><span>Memory</span>
+        </button>
+        <button type="button" data-mobile-action="settings">
+          <span class="nav-glyph">S</span><span>Settings</span>
+        </button>
+      </nav>
     </main>
+
+    <aside class="context-panel desktop-only">
+      <section class="panel-card welcome-card">
+        <div class="panel-card-head">
+          <div><span class="eyebrow">PICKLO V3</span><h2>One assistant.<br />Many directions.</h2></div>
+          <img src="assets/picklo-mark.svg" alt="" />
+        </div>
+        <p>Ask questions, write, code, plan, analyze documents, brainstorm ideas, or work through decisions.</p>
+      </section>
+
+      <section class="panel-card">
+        <div class="panel-title"><h3>Modes</h3><span id="activeModeLabel">General</span></div>
+        <div class="mode-grid">
+          <button class="active" data-mode="general" type="button"><strong>General</strong><small>Anything</small></button>
+          <button data-mode="write" type="button"><strong>Write</strong><small>Draft & refine</small></button>
+          <button data-mode="code" type="button"><strong>Code</strong><small>Build & debug</small></button>
+          <button data-mode="analyze" type="button"><strong>Analyze</strong><small>Files & reasoning</small></button>
+        </div>
+      </section>
+
+      <section class="panel-card compact">
+        <button class="panel-row" id="panelFilesBtn" type="button">
+          <span class="panel-glyph files-color">F</span>
+          <span><strong>Local files</strong><small id="panelFileCount">0 available</small></span>
+          <b>›</b>
+        </button>
+        <button class="panel-row" id="panelMemoryBtn" type="button">
+          <span class="panel-glyph memory-color">M</span>
+          <span><strong>Memory</strong><small id="panelMemoryCount">0 saved</small></span>
+          <b>›</b>
+        </button>
+        <button class="panel-row" id="panelModelBtn" type="button">
+          <span class="panel-glyph model-color">A</span>
+          <span><strong>Local model</strong><small id="panelModelName">Not started</small></span>
+          <b>›</b>
+        </button>
+      </section>
+
+      <div class="privacy-card">
+        <strong>Local by default</strong>
+        <p>Picklo stores its app data on this device and runs model inference through WebGPU.</p>
+      </div>
+    </aside>
   </div>
 
-  <div class="overlay hidden" id="overlay"></div>
+  <div class="backdrop hidden" id="backdrop"></div>
 
-  <section class="modal hidden" id="memoryModal" role="dialog" aria-modal="true" aria-labelledby="memoryTitle">
-    <div class="modal-header">
-      <div>
-        <h2 id="memoryTitle">Memory</h2>
-        <p>These notes are injected into every conversation on this browser.</p>
-      </div>
-      <button class="icon-button modal-close" data-close-modal type="button" aria-label="Close">×</button>
+  <section class="sheet hidden" id="settingsSheet" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
+    <div class="sheet-handle"></div>
+    <header class="sheet-header">
+      <div><span class="eyebrow">PICKLO</span><h2 id="settingsTitle">Settings</h2><p>Choose how Picklo runs on this device.</p></div>
+      <button class="sheet-close" data-close-sheet type="button">×</button>
+    </header>
+    <div class="sheet-body">
+      <label class="field-label" for="modelSelect">Local model</label>
+      <select class="select-field" id="modelSelect"></select>
+      <p class="help-text">Picklo only lists models reported by the WebLLM runtime. Larger models may need substantially more GPU memory.</p>
+
+      <button class="primary-action" id="loadModelBtn" type="button">Start selected model</button>
+
+      <div class="divider"></div>
+
+      <label class="field-label" for="defaultModeSelect">Default mode</label>
+      <select class="select-field" id="defaultModeSelect">
+        <option value="general">General</option>
+        <option value="write">Write</option>
+        <option value="code">Code</option>
+        <option value="analyze">Analyze</option>
+      </select>
+
+      <button class="secondary-action full" id="dataBtn" type="button">Backup & restore Picklo</button>
     </div>
+  </section>
 
-    <div class="modal-body">
+  <section class="sheet hidden" id="memorySheet" role="dialog" aria-modal="true" aria-labelledby="memoryTitle">
+    <div class="sheet-handle"></div>
+    <header class="sheet-header">
+      <div><span class="eyebrow">PERSONAL CONTEXT</span><h2 id="memoryTitle">Memory</h2><p>Saved details can be used in future chats when relevant.</p></div>
+      <button class="sheet-close" data-close-sheet type="button">×</button>
+    </header>
+    <div class="sheet-body">
       <div class="memory-list" id="memoryList"></div>
-
       <label class="field-label" for="memoryInput">Add memory</label>
-      <textarea
-        class="modal-textarea"
-        id="memoryInput"
-        rows="4"
-        placeholder="Example: My preferred coding language is JavaScript."
-      ></textarea>
-
-      <div class="modal-actions">
-        <button class="secondary-button" id="clearMemoryBtn" type="button">Clear all memory</button>
-        <button class="primary-button" id="addMemoryBtn" type="button">Save memory</button>
+      <textarea class="sheet-textarea" id="memoryInput" rows="4" placeholder="Example: I prefer concise answers unless I ask for detail."></textarea>
+      <div class="sheet-actions">
+        <button class="secondary-action danger" id="clearMemoryBtn" type="button">Clear memory</button>
+        <button class="primary-action small" id="addMemoryBtn" type="button">Save memory</button>
       </div>
     </div>
   </section>
 
-  <section class="modal hidden" id="dataModal" role="dialog" aria-modal="true" aria-labelledby="dataTitle">
-    <div class="modal-header">
-      <div>
-        <h2 id="dataTitle">Picklo data</h2>
-        <p>Back up or restore local chats, memory and preferences.</p>
-      </div>
-      <button class="icon-button modal-close" data-close-modal type="button" aria-label="Close">×</button>
+  <section class="sheet hidden" id="filesSheet" role="dialog" aria-modal="true" aria-labelledby="filesTitle">
+    <div class="sheet-handle"></div>
+    <header class="sheet-header">
+      <div><span class="eyebrow">LOCAL CONTEXT</span><h2 id="filesTitle">Files</h2><p>Picklo can retrieve relevant text from your local documents.</p></div>
+      <button class="sheet-close" data-close-sheet type="button">×</button>
+    </header>
+    <div class="sheet-body">
+      <label class="primary-action upload-action" for="fileInput">Add files</label>
+      <div class="file-list sheet-file-list" id="sheetFileList"></div>
+      <p class="help-text">Supported: PDF and common text/code files. Scanned image-only PDFs are not OCR'd in V3.</p>
     </div>
+  </section>
 
-    <div class="modal-body">
+  <section class="sheet hidden" id="dataSheet" role="dialog" aria-modal="true" aria-labelledby="dataTitle">
+    <div class="sheet-handle"></div>
+    <header class="sheet-header">
+      <div><span class="eyebrow">YOUR DATA</span><h2 id="dataTitle">Backup & restore</h2><p>Move Picklo's local state between browsers or devices.</p></div>
+      <button class="sheet-close" data-close-sheet type="button">×</button>
+    </header>
+    <div class="sheet-body">
       <div class="data-grid">
-        <button class="data-card" id="exportDataBtn" type="button">
-          <strong>Export data</strong>
-          <span>Download a JSON backup.</span>
-        </button>
-
-        <label class="data-card file-card" for="importDataInput">
-          <strong>Import data</strong>
-          <span>Restore a previous Picklo V2 backup.</span>
-          <input id="importDataInput" type="file" accept=".json,application/json" hidden />
-        </label>
+        <button id="exportDataBtn" type="button"><strong>Export Picklo</strong><span>Download chats, memory, preferences and local file text.</span></button>
+        <label for="importDataInput"><strong>Import Picklo</strong><span>Restore a Picklo V3 JSON backup.</span><input id="importDataInput" type="file" hidden accept=".json,application/json" /></label>
       </div>
-
-      <p class="data-warning">
-        Import replaces the local Picklo V2 data currently stored in this browser.
-      </p>
     </div>
   </section>
 
-  <template id="welcomeTemplate">
-    <div class="welcome">
-      <div class="hero-mark">AI</div>
-      <p class="eyebrow">PICKLO V2</p>
-      <h1>Picklo now remembers.</h1>
-      <p class="welcome-copy">
-        Persistent chats, editable memory, model switching, code formatting and interruption —
-        all without an application backend.
-      </p>
-
-      <div class="feature-strip">
-        <span>Saved chats</span>
-        <span>Persistent memory</span>
-        <span>Multiple models</span>
-        <span>Local inference</span>
-      </div>
-
-      <div class="prompt-grid">
-        <button class="prompt-card" type="button" data-prompt="Explain what is new in Picklo V2.">
-          <strong>Explore V2</strong>
-          <span>Tell me what changed.</span>
-        </button>
-        <button class="prompt-card" type="button" data-prompt="Build a clean responsive navigation bar using HTML, CSS and JavaScript.">
-          <strong>Code something</strong>
-          <span>Create a frontend component.</span>
-        </button>
-        <button class="prompt-card" type="button" data-prompt="Give me five practical ideas for turning this local AI into a useful AI agent.">
-          <strong>Plan V3</strong>
-          <span>Turn the chatbot into an agent.</span>
-        </button>
-      </div>
-
-      <p class="load-hint">Choose a model above and press <strong>Load AI</strong>.</p>
+  <section class="sheet conversations-sheet hidden" id="conversationsSheet" role="dialog" aria-modal="true" aria-labelledby="conversationTitle">
+    <div class="sheet-handle"></div>
+    <header class="sheet-header">
+      <div><span class="eyebrow">PICKLO</span><h2 id="conversationTitle">Conversations</h2></div>
+      <button class="sheet-close" data-close-sheet type="button">×</button>
+    </header>
+    <div class="sheet-body">
+      <button class="new-chat mobile-new" id="mobileNewChatBtn" type="button"><span>+</span> New chat</button>
+      <div class="chat-list mobile-chat-list" id="mobileChatList"></div>
     </div>
-  </template>
+  </section>
+
+  <section class="sheet mode-sheet hidden" id="modeSheet" role="dialog" aria-modal="true" aria-labelledby="modeTitle">
+    <div class="sheet-handle"></div>
+    <header class="sheet-header">
+      <div><span class="eyebrow">RESPONSE MODE</span><h2 id="modeTitle">What are we doing?</h2><p>The mode changes Picklo's emphasis, not what you are allowed to ask.</p></div>
+      <button class="sheet-close" data-close-sheet type="button">×</button>
+    </header>
+    <div class="sheet-body">
+      <div class="sheet-mode-grid">
+        <button data-sheet-mode="general" type="button"><strong>General</strong><span>Questions, ideas, everyday help and mixed tasks.</span></button>
+        <button data-sheet-mode="write" type="button"><strong>Write</strong><span>Draft, rewrite, structure, polish and develop content.</span></button>
+        <button data-sheet-mode="code" type="button"><strong>Code</strong><span>Build, explain, debug and reason about software.</span></button>
+        <button data-sheet-mode="analyze" type="button"><strong>Analyze</strong><span>Documents, evidence, comparisons and structured reasoning.</span></button>
+      </div>
+    </div>
+  </section>
 
   <script type="module" src="app.js"></script>
 </body>
