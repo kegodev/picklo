@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#0a0a0a" />
+  <meta name="description" content="A local-first AI assistant that runs directly in your browser using WebGPU." />
+  <title>Own AI v0.1</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <main class="app-shell">
+    <aside class="sidebar" id="sidebar">
+      <div>
+        <div class="brand">
+          <div class="brand-mark">AI</div>
+          <div>
+            <h1>Own AI</h1>
+            <p>Local-first assistant</p>
+          </div>
+        </div>
+
+        <button class="new-chat" id="newChatBtn" type="button">
+          <span>+</span>
+          New chat
+        </button>
+      </div>
+
+      <div class="sidebar-bottom">
+        <div class="runtime-card">
+          <span class="status-dot" id="statusDot"></span>
+          <div>
+            <strong id="runtimeStatus">Not loaded</strong>
+            <small id="runtimeDetail">Model runs in your browser</small>
+          </div>
+        </div>
+        <p class="privacy-note">Your chat is processed locally after the model files are downloaded.</p>
+      </div>
+    </aside>
+
+    <section class="chat-panel">
+      <header class="topbar">
+        <button class="icon-btn menu-btn" id="menuBtn" type="button" aria-label="Open menu">☰</button>
+        <div>
+          <strong>Own AI v0.1</strong>
+          <span id="modelLabel">Llama 3.2 1B</span>
+        </div>
+        <button class="load-btn" id="loadModelBtn" type="button">Load AI</button>
+      </header>
+
+      <div class="progress-wrap hidden" id="progressWrap">
+        <div class="progress-track">
+          <div class="progress-bar" id="progressBar"></div>
+        </div>
+        <span id="progressText">Preparing model…</span>
+      </div>
+
+      <div class="messages" id="messages">
+        <section class="welcome" id="welcome">
+          <div class="hero-orb">AI</div>
+          <h2>Your own AI starts here.</h2>
+          <p>
+            This first version runs an open language model directly in your browser.
+            Load the model, then start chatting.
+          </p>
+
+          <div class="suggestions">
+            <button class="suggestion" data-prompt="Explain how this AI works in simple terms.">
+              How do you work?
+            </button>
+            <button class="suggestion" data-prompt="Write a simple JavaScript function that checks if a number is prime.">
+              Help me code
+            </button>
+            <button class="suggestion" data-prompt="Give me three ideas for improving this AI project.">
+              Improve this AI
+            </button>
+          </div>
+        </section>
+      </div>
+
+      <form class="composer" id="chatForm">
+        <div class="input-shell">
+          <textarea
+            id="messageInput"
+            rows="1"
+            placeholder="Load the AI before sending a message…"
+            disabled
+          ></textarea>
+          <button class="send-btn" id="sendBtn" type="submit" disabled aria-label="Send">
+            ↑
+          </button>
+        </div>
+        <p class="composer-note">
+          Local AI can make mistakes. Verify important information.
+        </p>
+      </form>
+    </section>
+  </main>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
