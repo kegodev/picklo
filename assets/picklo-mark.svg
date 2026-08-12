@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">Picklo</title>
+  <desc id="desc">Picklo robot mascot mark.</desc>
+  <defs>
+    <linearGradient id="bg" x1="74" y1="64" x2="438" y2="448" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#8B5CF6"/>
+      <stop offset="1" stop-color="#5367E8"/>
+    </linearGradient>
+    <linearGradient id="eye" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#69E9FF"/>
+      <stop offset="1" stop-color="#55A7FF"/>
+    </linearGradient>
+    <filter id="shadow" x="-25%" y="-25%" width="150%" height="150%">
+      <feDropShadow dx="0" dy="16" stdDeviation="18" flood-color="#24306F" flood-opacity=".22"/>
+    </filter>
+  </defs>
+
+  <circle cx="256" cy="256" r="210" fill="url(#bg)" filter="url(#shadow)"/>
+  <ellipse cx="256" cy="270" rx="176" ry="70" fill="none" stroke="#D8D0FF" stroke-width="12" opacity=".72" transform="rotate(-8 256 270)"/>
+
+  <path d="M256 72v45" stroke="#17224A" stroke-width="18" stroke-linecap="round"/>
+  <circle cx="256" cy="66" r="24" fill="#67E5FF" stroke="#17224A" stroke-width="12"/>
+
+  <rect x="118" y="123" width="276" height="252" rx="100" fill="#FFFFFF" stroke="#17224A" stroke-width="18"/>
+  <rect x="151" y="171" width="210" height="137" rx="63" fill="#17224A"/>
+
+  <ellipse cx="211" cy="239" rx="22" ry="31" fill="url(#eye)"/>
+  <ellipse cx="301" cy="239" rx="22" ry="31" fill="url(#eye)"/>
+  <circle cx="205" cy="229" r="7" fill="#FFFFFF" opacity=".78"/>
+  <circle cx="295" cy="229" r="7" fill="#FFFFFF" opacity=".78"/>
+
+  <path d="M214 331c13 16 27 24 42 24s29-8 42-24" fill="none" stroke="#17224A" stroke-width="15" stroke-linecap="round"/>
+  <circle cx="152" cy="331" r="18" fill="#F4C95D"/>
+  <circle cx="360" cy="331" r="18" fill="#F4C95D"/>
+</svg>
