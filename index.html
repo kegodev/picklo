@@ -1,101 +1,217 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="theme-color" content="#0a0a0a" />
-  <meta name="description" content="A local-first AI assistant that runs directly in your browser using WebGPU." />
-  <title>Own AI v0.1</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#080808" />
+  <meta name="color-scheme" content="dark" />
+  <meta
+    name="description"
+    content="Picklo V2 — a local-first browser AI with persistent memory, saved chats and selectable open models."
+  />
+  <title>Picklo V2</title>
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="icon" href="app-icon.svg" type="image/svg+xml" />
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <main class="app-shell">
+  <div class="app-shell">
     <aside class="sidebar" id="sidebar">
-      <div>
-        <div class="brand">
+      <div class="sidebar-top">
+        <div class="brand-row">
           <div class="brand-mark">AI</div>
-          <div>
-            <h1>Own AI</h1>
-            <p>Local-first assistant</p>
+          <div class="brand-copy">
+            <strong>Picklo</strong>
+            <span>Version 2</span>
           </div>
+          <button class="icon-button sidebar-close" id="sidebarCloseBtn" type="button" aria-label="Close sidebar">×</button>
         </div>
 
-        <button class="new-chat" id="newChatBtn" type="button">
-          <span>+</span>
-          New chat
+        <button class="new-chat-button" id="newChatBtn" type="button">
+          <span class="plus">+</span>
+          <span>New chat</span>
         </button>
+
+        <div class="sidebar-section">
+          <div class="section-heading">
+            <span>Chats</span>
+            <button class="tiny-button" id="clearChatsBtn" type="button" title="Delete all chats">Clear</button>
+          </div>
+          <div class="chat-list" id="chatList"></div>
+        </div>
       </div>
 
       <div class="sidebar-bottom">
+        <button class="utility-button" id="memoryBtn" type="button">
+          <span>Memory</span>
+          <small id="memoryCount">0 saved</small>
+        </button>
+
+        <button class="utility-button" id="dataBtn" type="button">
+          <span>Data</span>
+          <small>Export / import</small>
+        </button>
+
         <div class="runtime-card">
           <span class="status-dot" id="statusDot"></span>
           <div>
-            <strong id="runtimeStatus">Not loaded</strong>
-            <small id="runtimeDetail">Model runs in your browser</small>
+            <strong id="runtimeStatus">AI offline</strong>
+            <small id="runtimeDetail">Choose a model and load it</small>
           </div>
         </div>
-        <p class="privacy-note">Your chat is processed locally after the model files are downloaded.</p>
       </div>
     </aside>
 
-    <section class="chat-panel">
+    <main class="main-panel">
       <header class="topbar">
-        <button class="icon-btn menu-btn" id="menuBtn" type="button" aria-label="Open menu">☰</button>
-        <div>
-          <strong>Own AI v0.1</strong>
-          <span id="modelLabel">Llama 3.2 1B</span>
+        <button class="icon-button menu-button" id="menuBtn" type="button" aria-label="Open sidebar">
+          <span></span><span></span><span></span>
+        </button>
+
+        <div class="topbar-title">
+          <strong id="activeChatTitle">New chat</strong>
+          <span id="topbarStatus">Local-first AI</span>
         </div>
-        <button class="load-btn" id="loadModelBtn" type="button">Load AI</button>
+
+        <div class="topbar-actions">
+          <label class="model-select-wrap" for="modelSelect">
+            <span>Model</span>
+            <select id="modelSelect" aria-label="Choose AI model"></select>
+          </label>
+          <button class="primary-button" id="loadModelBtn" type="button">Load AI</button>
+        </div>
       </header>
 
-      <div class="progress-wrap hidden" id="progressWrap">
+      <div class="load-progress hidden" id="progressWrap" aria-live="polite">
+        <div class="load-progress-row">
+          <span id="progressText">Preparing model…</span>
+          <span id="progressPercent">0%</span>
+        </div>
         <div class="progress-track">
           <div class="progress-bar" id="progressBar"></div>
         </div>
-        <span id="progressText">Preparing model…</span>
       </div>
 
-      <div class="messages" id="messages">
-        <section class="welcome" id="welcome">
-          <div class="hero-orb">AI</div>
-          <h2>Your own AI starts here.</h2>
-          <p>
-            This first version runs an open language model directly in your browser.
-            Load the model, then start chatting.
-          </p>
-
-          <div class="suggestions">
-            <button class="suggestion" data-prompt="Explain how this AI works in simple terms.">
-              How do you work?
-            </button>
-            <button class="suggestion" data-prompt="Write a simple JavaScript function that checks if a number is prime.">
-              Help me code
-            </button>
-            <button class="suggestion" data-prompt="Give me three ideas for improving this AI project.">
-              Improve this AI
-            </button>
-          </div>
-        </section>
-      </div>
+      <section class="messages" id="messages" aria-live="polite"></section>
 
       <form class="composer" id="chatForm">
-        <div class="input-shell">
+        <div class="composer-inner">
           <textarea
             id="messageInput"
             rows="1"
-            placeholder="Load the AI before sending a message…"
+            maxlength="12000"
+            placeholder="Load a model to start chatting…"
             disabled
           ></textarea>
-          <button class="send-btn" id="sendBtn" type="submit" disabled aria-label="Send">
-            ↑
-          </button>
+
+          <div class="composer-actions">
+            <span class="local-badge">LOCAL</span>
+            <button class="stop-button hidden" id="stopBtn" type="button">Stop</button>
+            <button class="send-button" id="sendBtn" type="submit" disabled aria-label="Send message">↑</button>
+          </div>
         </div>
-        <p class="composer-note">
-          Local AI can make mistakes. Verify important information.
-        </p>
+
+        <div class="composer-meta">
+          <span>Shift + Enter for a new line</span>
+          <span id="storageStatus">Chats and memory stay in this browser</span>
+        </div>
       </form>
-    </section>
-  </main>
+    </main>
+  </div>
+
+  <div class="overlay hidden" id="overlay"></div>
+
+  <section class="modal hidden" id="memoryModal" role="dialog" aria-modal="true" aria-labelledby="memoryTitle">
+    <div class="modal-header">
+      <div>
+        <h2 id="memoryTitle">Memory</h2>
+        <p>These notes are injected into every conversation on this browser.</p>
+      </div>
+      <button class="icon-button modal-close" data-close-modal type="button" aria-label="Close">×</button>
+    </div>
+
+    <div class="modal-body">
+      <div class="memory-list" id="memoryList"></div>
+
+      <label class="field-label" for="memoryInput">Add memory</label>
+      <textarea
+        class="modal-textarea"
+        id="memoryInput"
+        rows="4"
+        placeholder="Example: My preferred coding language is JavaScript."
+      ></textarea>
+
+      <div class="modal-actions">
+        <button class="secondary-button" id="clearMemoryBtn" type="button">Clear all memory</button>
+        <button class="primary-button" id="addMemoryBtn" type="button">Save memory</button>
+      </div>
+    </div>
+  </section>
+
+  <section class="modal hidden" id="dataModal" role="dialog" aria-modal="true" aria-labelledby="dataTitle">
+    <div class="modal-header">
+      <div>
+        <h2 id="dataTitle">Picklo data</h2>
+        <p>Back up or restore local chats, memory and preferences.</p>
+      </div>
+      <button class="icon-button modal-close" data-close-modal type="button" aria-label="Close">×</button>
+    </div>
+
+    <div class="modal-body">
+      <div class="data-grid">
+        <button class="data-card" id="exportDataBtn" type="button">
+          <strong>Export data</strong>
+          <span>Download a JSON backup.</span>
+        </button>
+
+        <label class="data-card file-card" for="importDataInput">
+          <strong>Import data</strong>
+          <span>Restore a previous Picklo V2 backup.</span>
+          <input id="importDataInput" type="file" accept=".json,application/json" hidden />
+        </label>
+      </div>
+
+      <p class="data-warning">
+        Import replaces the local Picklo V2 data currently stored in this browser.
+      </p>
+    </div>
+  </section>
+
+  <template id="welcomeTemplate">
+    <div class="welcome">
+      <div class="hero-mark">AI</div>
+      <p class="eyebrow">PICKLO V2</p>
+      <h1>Picklo now remembers.</h1>
+      <p class="welcome-copy">
+        Persistent chats, editable memory, model switching, code formatting and interruption —
+        all without an application backend.
+      </p>
+
+      <div class="feature-strip">
+        <span>Saved chats</span>
+        <span>Persistent memory</span>
+        <span>Multiple models</span>
+        <span>Local inference</span>
+      </div>
+
+      <div class="prompt-grid">
+        <button class="prompt-card" type="button" data-prompt="Explain what is new in Picklo V2.">
+          <strong>Explore V2</strong>
+          <span>Tell me what changed.</span>
+        </button>
+        <button class="prompt-card" type="button" data-prompt="Build a clean responsive navigation bar using HTML, CSS and JavaScript.">
+          <strong>Code something</strong>
+          <span>Create a frontend component.</span>
+        </button>
+        <button class="prompt-card" type="button" data-prompt="Give me five practical ideas for turning this local AI into a useful AI agent.">
+          <strong>Plan V3</strong>
+          <span>Turn the chatbot into an agent.</span>
+        </button>
+      </div>
+
+      <p class="load-hint">Choose a model above and press <strong>Load AI</strong>.</p>
+    </div>
+  </template>
 
   <script type="module" src="app.js"></script>
 </body>
