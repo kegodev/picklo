@@ -1,12 +1,12 @@
 {
-  "name": "Picklo V3",
+  "name": "Picklo V4",
   "short_name": "Picklo",
-  "description": "A local-first general AI assistant for thinking, writing, coding, planning and file analysis.",
+  "description": "A local-first general AI assistant with a refined chat-first interface.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
-  "background_color": "#F6F3EE",
-  "theme_color": "#F6F3EE",
+  "background_color": "#fbfaf8",
+  "theme_color": "#fbfaf8",
   "icons": [
     {
       "src": "assets/picklo-mark.svg",

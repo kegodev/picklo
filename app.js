@@ -1,8 +1,8 @@
 import * as webllm from "https://esm.run/@mlc-ai/web-llm";
 
-const APP_VERSION = "3.0.0";
-const STORAGE_KEY = "picklo-v3-state";
-const V2_STORAGE_KEY = "picklo-v2-state";
+const APP_VERSION = "4.0.0";
+const STORAGE_KEY = "picklo-v4-state";
+const V3_STORAGE_KEY = "picklo-v3-state";
 const FILE_DB = "picklo-v3-files";
 const FILE_STORE = "documents";
 const MAX_FILE_CHARS = 240000;
@@ -23,7 +23,7 @@ const MODE_PROMPTS = {
 };
 
 const BASE_SYSTEM_PROMPT = `
-You are Picklo V3, a general-purpose personal AI assistant that runs locally in the user's browser.
+You are Picklo V4, a general-purpose personal AI assistant that runs locally in the user's browser.
 You are useful for questions, writing, coding, planning, brainstorming, explanations, decision support and document analysis.
 Do not claim to be ChatGPT or OpenAI. When asked who you are, say you are Picklo.
 
@@ -124,6 +124,10 @@ const composerNote = $("composerNote");
 const contextBanner = $("contextBanner");
 const contextText = $("contextText");
 const clearContextBtn = $("clearContextBtn");
+const chatSearchInput = $("chatSearchInput");
+const headerChatTitle = $("headerChatTitle");
+const headerNewChatBtn = $("headerNewChatBtn");
+const sidebarModelText = $("sidebarModelText");
 
 boot();
 
@@ -145,6 +149,9 @@ async function boot() {
 
 function bindEvents() {
   newChatBtn.addEventListener("click", createNewChat);
+  headerNewChatBtn.addEventListener("click", createNewChat);
+  chatSearchInput.addEventListener("input", renderChats);
+
   mobileNewChatBtn.addEventListener("click", () => {
     createNewChat();
     closeSheets();
@@ -308,9 +315,9 @@ function loadState() {
     const current = localStorage.getItem(STORAGE_KEY);
     if (current) return normalizeState(JSON.parse(current));
 
-    const v2 = localStorage.getItem(V2_STORAGE_KEY);
-    if (v2) {
-      const migrated = normalizeState(JSON.parse(v2));
+    const v3 = localStorage.getItem(V3_STORAGE_KEY);
+    if (v3) {
+      const migrated = normalizeState(JSON.parse(v3));
       migrated.version = APP_VERSION;
       localStorage.setItem(STORAGE_KEY, JSON.stringify(migrated));
       return migrated;
@@ -418,7 +425,6 @@ function setMode(mode, persist = true) {
 
   const label = mode.charAt(0).toUpperCase() + mode.slice(1);
   activeModeLabel.textContent = label;
-  modeButton.textContent = label;
   assistantSubtitle.textContent = {
     general: "Your general-purpose personal AI",
     write: "Writing, drafting and refinement",
@@ -431,20 +437,49 @@ function setMode(mode, persist = true) {
 
 function renderAll() {
   renderChats();
+  renderHeader();
   renderMessages();
   renderFiles();
   renderStats();
   renderContext();
 }
 
+function renderHeader() {
+  const chat = getActiveChat();
+  headerChatTitle.textContent = chat.title || "New chat";
+}
+
 function renderChats() {
-  const ordered = [...state.chats].sort((a, b) => b.updatedAt - a.updatedAt);
+  const query = (chatSearchInput?.value || "").trim().toLowerCase();
+
+  const ordered = [...state.chats]
+    .sort((a, b) => b.updatedAt - a.updatedAt)
+    .filter((chat) => {
+      if (!query) return true;
+      const haystack = [
+        chat.title || "",
+        ...(chat.messages || []).slice(-3).map((message) => message.content || "")
+      ].join(" ").toLowerCase();
+      return haystack.includes(query);
+    });
+
   renderChatList(chatList, ordered);
   renderChatList(mobileChatList, ordered);
 }
 
 function renderChatList(container, chats) {
   container.innerHTML = "";
+
+  if (!chats.length) {
+    const empty = document.createElement("div");
+    empty.className = "chat-empty";
+    empty.textContent = chatSearchInput?.value
+      ? "No conversations match your search."
+      : "Your conversations will appear here.";
+    container.appendChild(empty);
+    return;
+  }
+
   for (const chat of chats) {
     const row = document.createElement("div");
     row.className = `chat-item${chat.id === state.activeChatId ? " active" : ""}`;
@@ -452,14 +487,35 @@ function renderChatList(container, chats) {
     const open = document.createElement("button");
     open.type = "button";
     open.className = "chat-open";
-    open.textContent = chat.title || "Untitled chat";
     open.title = chat.title || "Untitled chat";
+
+    const primary = document.createElement("span");
+    primary.className = "chat-primary";
+    primary.textContent = chat.title || "Untitled chat";
+
+    const secondary = document.createElement("span");
+    secondary.className = "chat-secondary";
+
+    const last = [...(chat.messages || [])]
+      .reverse()
+      .find((message) => message.content)?.content || "No messages yet";
+
+    const preview = document.createElement("span");
+    preview.className = "chat-preview";
+    preview.textContent = last.replace(/\s+/g, " ");
+
+    const time = document.createElement("time");
+    time.textContent = formatConversationTime(chat.updatedAt);
+
+    secondary.append(preview, time);
+    open.append(primary, secondary);
     open.addEventListener("click", () => switchChat(chat.id));
 
     const remove = document.createElement("button");
     remove.type = "button";
     remove.className = "chat-delete";
     remove.textContent = "×";
+    remove.title = "Delete chat";
     remove.addEventListener("click", (event) => {
       event.stopPropagation();
       deleteChat(chat.id);
@@ -470,6 +526,21 @@ function renderChatList(container, chats) {
   }
 }
 
+function formatConversationTime(value) {
+  const date = new Date(value || Date.now());
+  const now = new Date();
+
+  if (date.toDateString() === now.toDateString()) {
+    return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  }
+
+  const yesterday = new Date(now);
+  yesterday.setDate(now.getDate() - 1);
+  if (date.toDateString() === yesterday.toDateString()) return "Yesterday";
+
+  return date.toLocaleDateString([], { month: "short", day: "numeric" });
+}
+
 function renderMessages() {
   const chat = getActiveChat();
   messages.innerHTML = "";
@@ -477,28 +548,26 @@ function renderMessages() {
   if (!chat.messages.length) {
     messages.innerHTML = `
       <div class="welcome">
-        <div class="welcome-intro">
-          <img src="assets/picklo-mark.svg" alt="" />
-          <div class="welcome-bubble">
-            <strong>Picklo</strong>
-            Hi. I’m Picklo. Ask me anything, bring me a task, or attach a document and work through it with me.
-            <time>Now</time>
-          </div>
-        </div>
+        <img class="welcome-mark" src="assets/picklo-mark.svg" alt="" />
+        <h2>How can I help?</h2>
+        <p>Talk to Picklo naturally. Ask a question, work through an idea, write something, code, or attach a file.</p>
 
-        <div class="welcome-title">What are we doing?</div>
         <div class="starter-grid">
           <button data-mode="general" data-prompt="Help me think through something. Ask only the questions you genuinely need." type="button">
-            <span class="starter-glyph ask-glyph">A</span><strong>Ask anything</strong><small>Questions, ideas, decisions</small>
+            <span class="starter-icon ask-icon">A</span>
+            <span class="starter-copy"><strong>Think with me</strong><span>Questions, ideas and decisions</span></span>
           </button>
-          <button data-mode="write" data-prompt="Help me write something. First focus on the audience, purpose and strongest structure." type="button">
-            <span class="starter-glyph write-glyph">W</span><strong>Write with Picklo</strong><small>Draft, rewrite, improve</small>
+          <button data-mode="write" data-prompt="Help me write something. Focus on the audience, purpose and strongest structure." type="button">
+            <span class="starter-icon write-icon">W</span>
+            <span class="starter-copy"><strong>Write something</strong><span>Draft, rewrite and improve</span></span>
           </button>
           <button data-mode="code" data-prompt="Help me build or debug some code. Prioritize a working solution and explain the important choices." type="button">
-            <span class="starter-glyph code-glyph">C</span><strong>Code together</strong><small>Build, debug, explain</small>
+            <span class="starter-icon code-icon">C</span>
+            <span class="starter-copy"><strong>Code together</strong><span>Build, debug and explain</span></span>
           </button>
           <button data-mode="analyze" data-prompt="I want to analyze a document or problem carefully. Help me separate evidence, assumptions and conclusions." type="button">
-            <span class="starter-glyph file-glyph">F</span><strong>Analyze something</strong><small>Files, evidence, reasoning</small>
+            <span class="starter-icon analyze-icon">F</span>
+            <span class="starter-copy"><strong>Analyze something</strong><span>Files, evidence and reasoning</span></span>
           </button>
         </div>
       </div>`;
@@ -628,7 +697,7 @@ async function loadSelectedModel() {
   if (!("gpu" in navigator)) {
     setRuntime("WebGPU unavailable", "Use a WebGPU-capable browser", "error");
     closeSheets();
-    addError("WebGPU is unavailable in this browser. Picklo V3 needs a recent WebGPU-capable browser for local inference.");
+    addError("WebGPU is unavailable in this browser. Picklo V4 needs a recent WebGPU-capable browser for local inference.");
     return;
   }
 
@@ -707,12 +776,14 @@ function setRuntime(title, detail, stateName = "idle") {
     const modelName = friendlyModelName(loadedModelId || state.selectedModel);
     modelStatus.textContent = `${modelName} • Local`;
     panelModelName.textContent = modelName;
-    startButton.textContent = "Ready";
+    sidebarModelText.textContent = modelName;
+    startButton.title = "Picklo settings";
     startButton.classList.add("ready");
   } else {
     modelStatus.textContent = detail;
     panelModelName.textContent = detail;
-    startButton.textContent = stateName === "loading" ? "Starting…" : "Start Picklo";
+    sidebarModelText.textContent = detail;
+    startButton.title = stateName === "loading" ? "Picklo is starting" : "Picklo settings";
     startButton.classList.remove("ready");
   }
 }
@@ -742,6 +813,7 @@ async function sendMessage() {
 
   saveState();
   renderChats();
+  renderHeader();
   renderMessages();
   renderContext();
 
@@ -1191,7 +1263,7 @@ async function exportData() {
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
-  link.download = `picklo-v3-backup-${new Date().toISOString().slice(0, 10)}.json`;
+  link.download = `picklo-v4-backup-${new Date().toISOString().slice(0, 10)}.json`;
   document.body.appendChild(link);
   link.click();
   link.remove();
@@ -1208,7 +1280,7 @@ async function importData(event) {
     const importedState = parsed.state || parsed;
 
     if (!Array.isArray(importedState.chats) || !Array.isArray(importedState.memories)) {
-      throw new Error("This is not a valid Picklo V3 backup.");
+      throw new Error("This is not a valid Picklo V4 backup.");
     }
 
     if (!confirm("Replace this browser's current Picklo data with the imported backup?")) return;

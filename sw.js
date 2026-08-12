@@ -1,4 +1,4 @@
-const CACHE = "picklo-v3-shell-v1";
+const CACHE = "picklo-v4-shell-v1";
 const SHELL = [
   "./",
   "./index.html",
@@ -6,16 +6,11 @@ const SHELL = [
   "./app.js",
   "./manifest.webmanifest",
   "./assets/picklo-mark.svg",
-  "./assets/picklo-logo.svg",
-  "./assets/picklo-v3-preview.png"
+  "./assets/picklo-logo.svg"
 ];
 
 self.addEventListener("install", (event) => {
-  event.waitUntil(
-    caches.open(CACHE).then((cache) =>
-      cache.addAll(SHELL.filter((url) => !url.endsWith("picklo-v3-preview.png")))
-    )
-  );
+  event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(SHELL)));
   self.skipWaiting();
 });
 
