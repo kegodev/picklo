@@ -1,15 +1,15 @@
 {
-  "name": "Picklo V2",
+  "name": "Picklo V3",
   "short_name": "Picklo",
-  "description": "Picklo \u2014 a local-first browser AI with saved chats and persistent memory.",
+  "description": "A local-first general AI assistant for thinking, writing, coding, planning and file analysis.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
-  "background_color": "#080808",
-  "theme_color": "#080808",
+  "background_color": "#F6F3EE",
+  "theme_color": "#F6F3EE",
   "icons": [
     {
-      "src": "app-icon.svg",
+      "src": "assets/picklo-mark.svg",
       "sizes": "any",
       "type": "image/svg+xml",
       "purpose": "any"

@@ -1,45 +1,49 @@
 import * as webllm from "https://esm.run/@mlc-ai/web-llm";
 
-const APP_VERSION = "2.0.0";
-const STORAGE_KEY = "picklo-v2-state";
-
-const BASE_SYSTEM_PROMPT = `
-You are Picklo V2, an independent local-first AI assistant.
-You are precise, useful, practical and honest about uncertainty.
-You run an open language model locally in the user's browser through WebGPU.
-You can use persistent memory supplied by the Picklo application.
-Do not claim to be ChatGPT or OpenAI.
-When asked about your identity, say you are Picklo V2.
-Use Markdown when it improves readability, especially for headings, lists and code.
-`.trim();
+const APP_VERSION = "3.0.0";
+const STORAGE_KEY = "picklo-v3-state";
+const V2_STORAGE_KEY = "picklo-v2-state";
+const FILE_DB = "picklo-v3-files";
+const FILE_STORE = "documents";
+const MAX_FILE_CHARS = 240000;
+const MAX_CONTEXT_CHARS = 9000;
 
 const PREFERRED_MODELS = [
-  {
-    id: "Llama-3.2-1B-Instruct-q4f16_1-MLC",
-    label: "Llama 3.2 1B",
-    tier: "Fast"
-  },
-  {
-    id: "SmolLM2-1.7B-Instruct-q4f16_1-MLC",
-    label: "SmolLM2 1.7B",
-    tier: "Balanced"
-  },
-  {
-    id: "Llama-3.2-3B-Instruct-q4f16_1-MLC",
-    label: "Llama 3.2 3B",
-    tier: "Stronger"
-  },
-  {
-    id: "Phi-3.5-mini-instruct-q4f16_1-MLC",
-    label: "Phi 3.5 Mini",
-    tier: "Heavy"
-  }
+  { id: "Llama-3.2-1B-Instruct-q4f16_1-MLC", label: "Llama 3.2 1B", note: "Fast" },
+  { id: "SmolLM2-1.7B-Instruct-q4f16_1-MLC", label: "SmolLM2 1.7B", note: "Balanced" },
+  { id: "Llama-3.2-3B-Instruct-q4f16_1-MLC", label: "Llama 3.2 3B", note: "Stronger" },
+  { id: "Phi-3.5-mini-instruct-q4f16_1-MLC", label: "Phi 3.5 Mini", note: "Heavy" }
 ];
+
+const MODE_PROMPTS = {
+  general: "Be a strong general-purpose assistant. Adapt to the user's task rather than forcing a particular format.",
+  write: "Prioritize writing quality, structure, audience, tone, clarity and useful revision. Produce finished writing when the user asks for it.",
+  code: "Prioritize correct software reasoning. Explain tradeoffs, provide complete code when appropriate, and avoid inventing APIs or behavior.",
+  analyze: "Prioritize evidence, structure, comparisons, assumptions and careful reasoning. Use supplied file context when relevant."
+};
+
+const BASE_SYSTEM_PROMPT = `
+You are Picklo V3, a general-purpose personal AI assistant that runs locally in the user's browser.
+You are useful for questions, writing, coding, planning, brainstorming, explanations, decision support and document analysis.
+Do not claim to be ChatGPT or OpenAI. When asked who you are, say you are Picklo.
+
+GENERAL RULES:
+1. Answer the user's actual request directly.
+2. Be precise and useful. State uncertainty instead of inventing facts.
+3. Use Markdown where it improves readability.
+4. For calculations and technical reasoning, show important steps and units when relevant.
+5. For code, prefer complete working examples and explain non-obvious decisions.
+6. When LOCAL FILE CONTEXT is supplied, treat it as user-provided reference material. Do not claim a file says something it does not say.
+7. When the local context is insufficient, say so.
+8. Persistent memory is user-provided context. Use it only when relevant.
+`.trim();
 
 const defaultState = () => ({
   version: APP_VERSION,
   activeChatId: null,
   selectedModel: "Llama-3.2-1B-Instruct-q4f16_1-MLC",
+  activeMode: "general",
+  defaultMode: "general",
   memories: [],
   chats: []
 });
@@ -49,56 +53,88 @@ let engine = null;
 let loadedModelId = null;
 let isGenerating = false;
 let generationWasStopped = false;
+let localFiles = [];
+let activeFileSources = [];
 
 const $ = (id) => document.getElementById(id);
 
-const sidebar = $("sidebar");
-const menuBtn = $("menuBtn");
-const sidebarCloseBtn = $("sidebarCloseBtn");
 const newChatBtn = $("newChatBtn");
+const mobileNewChatBtn = $("mobileNewChatBtn");
 const clearChatsBtn = $("clearChatsBtn");
 const chatList = $("chatList");
-const memoryBtn = $("memoryBtn");
-const dataBtn = $("dataBtn");
-const memoryCount = $("memoryCount");
-const memoryModal = $("memoryModal");
-const dataModal = $("dataModal");
-const overlay = $("overlay");
-const memoryList = $("memoryList");
-const memoryInput = $("memoryInput");
-const addMemoryBtn = $("addMemoryBtn");
-const clearMemoryBtn = $("clearMemoryBtn");
-const exportDataBtn = $("exportDataBtn");
-const importDataInput = $("importDataInput");
-
-const activeChatTitle = $("activeChatTitle");
-const topbarStatus = $("topbarStatus");
-const modelSelect = $("modelSelect");
-const loadModelBtn = $("loadModelBtn");
-const progressWrap = $("progressWrap");
-const progressBar = $("progressBar");
-const progressText = $("progressText");
-const progressPercent = $("progressPercent");
+const mobileChatList = $("mobileChatList");
 const messages = $("messages");
-const welcomeTemplate = $("welcomeTemplate");
-
 const chatForm = $("chatForm");
 const messageInput = $("messageInput");
 const sendBtn = $("sendBtn");
 const stopBtn = $("stopBtn");
-const storageStatus = $("storageStatus");
+const quickActions = $("quickActions");
+const fileInput = $("fileInput");
+const fileCount = $("fileCount");
+const panelFileCount = $("panelFileCount");
+const panelMemoryCount = $("panelMemoryCount");
+const memoryCount = $("memoryCount");
+const panelModelName = $("panelModelName");
+const activeModeLabel = $("activeModeLabel");
+const modeButton = $("modeButton");
 
-const statusDot = $("statusDot");
-const runtimeStatus = $("runtimeStatus");
-const runtimeDetail = $("runtimeDetail");
+const settingsBtn = $("settingsBtn");
+const filesBtn = $("filesBtn");
+const memoryBtn = $("memoryBtn");
+const panelFilesBtn = $("panelFilesBtn");
+const panelMemoryBtn = $("panelMemoryBtn");
+const panelModelBtn = $("panelModelBtn");
+const startButton = $("startButton");
+const mobileMenuBtn = $("mobileMenuBtn");
+
+const settingsSheet = $("settingsSheet");
+const memorySheet = $("memorySheet");
+const filesSheet = $("filesSheet");
+const dataSheet = $("dataSheet");
+const conversationsSheet = $("conversationsSheet");
+const modeSheet = $("modeSheet");
+const backdrop = $("backdrop");
+
+const modelSelect = $("modelSelect");
+const defaultModeSelect = $("defaultModeSelect");
+const loadModelBtn = $("loadModelBtn");
+const dataBtn = $("dataBtn");
+const exportDataBtn = $("exportDataBtn");
+const importDataInput = $("importDataInput");
+
+const memoryList = $("memoryList");
+const memoryInput = $("memoryInput");
+const addMemoryBtn = $("addMemoryBtn");
+const clearMemoryBtn = $("clearMemoryBtn");
+const sheetFileList = $("sheetFileList");
+
+const progressWrap = $("progressWrap");
+const progressText = $("progressText");
+const progressPercent = $("progressPercent");
+const progressBar = $("progressBar");
+
+const stateDot = $("stateDot");
+const stateTitle = $("stateTitle");
+const stateDetail = $("stateDetail");
+const presence = $("presence");
+const modelStatus = $("modelStatus");
+const assistantSubtitle = $("assistantSubtitle");
+const composerNote = $("composerNote");
+
+const contextBanner = $("contextBanner");
+const contextText = $("contextText");
+const clearContextBtn = $("clearContextBtn");
 
 boot();
 
-function boot() {
+async function boot() {
   populateModels();
   ensureActiveChat();
-  renderAll();
+  localFiles = await listLocalFiles();
   bindEvents();
+  defaultModeSelect.value = state.defaultMode || "general";
+  setMode(state.activeMode || state.defaultMode || "general", false);
+  renderAll();
 
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => {
@@ -108,18 +144,14 @@ function boot() {
 }
 
 function bindEvents() {
-  menuBtn.addEventListener("click", openSidebar);
-  sidebarCloseBtn.addEventListener("click", closeSidebar);
-
-  newChatBtn.addEventListener("click", () => {
+  newChatBtn.addEventListener("click", createNewChat);
+  mobileNewChatBtn.addEventListener("click", () => {
     createNewChat();
-    closeSidebar();
+    closeSheets();
   });
 
   clearChatsBtn.addEventListener("click", () => {
-    if (!state.chats.length) return;
-    if (!window.confirm("Delete all saved chats from this browser?")) return;
-
+    if (!confirm("Delete every saved Picklo conversation from this browser?")) return;
     state.chats = [];
     state.activeChatId = null;
     ensureActiveChat();
@@ -127,58 +159,64 @@ function bindEvents() {
     renderAll();
   });
 
+  settingsBtn.addEventListener("click", () => openSheet(settingsSheet));
+  panelModelBtn.addEventListener("click", () => openSheet(settingsSheet));
+  startButton.addEventListener("click", () => openSheet(settingsSheet));
+
+  filesBtn.addEventListener("click", () => openSheet(filesSheet));
+  panelFilesBtn.addEventListener("click", () => openSheet(filesSheet));
+
   memoryBtn.addEventListener("click", () => {
     renderMemory();
-    openModal(memoryModal);
+    openSheet(memorySheet);
   });
-
-  dataBtn.addEventListener("click", () => openModal(dataModal));
-
-  overlay.addEventListener("click", closeModals);
-
-  document.querySelectorAll("[data-close-modal]").forEach((button) => {
-    button.addEventListener("click", closeModals);
-  });
-
-  addMemoryBtn.addEventListener("click", () => {
-    const text = memoryInput.value.trim();
-    if (!text) return;
-
-    addMemory(text);
-    memoryInput.value = "";
+  panelMemoryBtn.addEventListener("click", () => {
     renderMemory();
-    showStorageStatus("Memory saved");
+    openSheet(memorySheet);
   });
 
-  clearMemoryBtn.addEventListener("click", () => {
-    if (!state.memories.length) return;
-    if (!window.confirm("Clear all persistent memory?")) return;
+  mobileMenuBtn.addEventListener("click", () => openSheet(conversationsSheet));
+  modeButton.addEventListener("click", () => openSheet(modeSheet));
 
-    state.memories = [];
-    saveState();
-    renderMemory();
-    renderSidebar();
-    showStorageStatus("Memory cleared");
+  document.querySelectorAll("[data-close-sheet]").forEach((button) => {
+    button.addEventListener("click", closeSheets);
+  });
+  backdrop.addEventListener("click", closeSheets);
+
+  document.querySelectorAll("[data-mobile-action]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const action = button.dataset.mobileAction;
+      if (action === "files") openSheet(filesSheet);
+      if (action === "memory") {
+        renderMemory();
+        openSheet(memorySheet);
+      }
+      if (action === "settings") openSheet(settingsSheet);
+    });
   });
 
-  exportDataBtn.addEventListener("click", exportData);
-  importDataInput.addEventListener("change", importData);
+  document.querySelectorAll("[data-mode]").forEach((button) => {
+    button.addEventListener("click", () => setMode(button.dataset.mode));
+  });
+  document.querySelectorAll("[data-sheet-mode]").forEach((button) => {
+    button.addEventListener("click", () => {
+      setMode(button.dataset.sheetMode);
+      closeSheets();
+    });
+  });
 
   modelSelect.addEventListener("change", () => {
     state.selectedModel = modelSelect.value;
     saveState();
-
     if (loadedModelId && loadedModelId !== state.selectedModel) {
-      loadModelBtn.textContent = "Switch model";
-      setRuntime("Model change pending", "Press Switch model", "idle");
-      messageInput.disabled = true;
-      sendBtn.disabled = true;
-    } else if (engine && loadedModelId === state.selectedModel && !isGenerating) {
-      loadModelBtn.textContent = "AI ready";
-      setRuntime("AI ready", friendlyModelName(loadedModelId), "ready");
-      messageInput.disabled = false;
-      sendBtn.disabled = false;
+      loadModelBtn.textContent = "Switch to selected model";
+      setRuntime("Model change ready", "Start the selected model", "idle");
     }
+  });
+
+  defaultModeSelect.addEventListener("change", () => {
+    state.defaultMode = defaultModeSelect.value;
+    saveState();
   });
 
   loadModelBtn.addEventListener("click", loadSelectedModel);
@@ -189,12 +227,19 @@ function bindEvents() {
   });
 
   messageInput.addEventListener("input", autoResize);
-
   messageInput.addEventListener("keydown", async (event) => {
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
       await sendMessage();
     }
+  });
+
+  quickActions.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-followup]");
+    if (!button || !engine || isGenerating) return;
+    messageInput.value = button.dataset.followup || "";
+    autoResize();
+    messageInput.focus();
   });
 
   stopBtn.addEventListener("click", stopGeneration);
@@ -203,62 +248,360 @@ function bindEvents() {
     const prompt = event.target.closest("[data-prompt]");
     if (prompt) {
       if (!engine) {
-        loadModelBtn.focus();
+        openSheet(settingsSheet);
         return;
       }
+      const mode = prompt.dataset.mode;
+      if (mode) setMode(mode);
       messageInput.value = prompt.dataset.prompt || "";
       autoResize();
       messageInput.focus();
       return;
     }
 
-    const copyButton = event.target.closest(".copy-code");
-    if (copyButton) {
-      const code = copyButton.closest(".code-block")?.querySelector("code")?.textContent || "";
+    const copy = event.target.closest(".copy-code");
+    if (copy) {
+      const code = copy.closest(".code-block")?.querySelector("code")?.textContent || "";
       navigator.clipboard?.writeText(code).then(() => {
-        const previous = copyButton.textContent;
-        copyButton.textContent = "Copied";
-        setTimeout(() => (copyButton.textContent = previous), 1100);
+        const old = copy.textContent;
+        copy.textContent = "Copied";
+        setTimeout(() => (copy.textContent = old), 1000);
       });
     }
   });
 
-  document.addEventListener("keydown", (event) => {
-    if (event.key === "Escape") {
-      closeModals();
-      closeSidebar();
-    }
+  fileInput.addEventListener("change", handleFiles);
+  clearContextBtn.addEventListener("click", () => {
+    activeFileSources = [];
+    renderContext();
   });
 
-  window.addEventListener("resize", () => {
-    if (window.innerWidth > 760) closeSidebar();
+  addMemoryBtn.addEventListener("click", () => {
+    const text = memoryInput.value.trim();
+    if (!text) return;
+    addMemory(text);
+    memoryInput.value = "";
+    renderMemory();
+    renderStats();
+  });
+
+  clearMemoryBtn.addEventListener("click", () => {
+    if (!state.memories.length) return;
+    if (!confirm("Clear all Picklo memory?")) return;
+    state.memories = [];
+    saveState();
+    renderMemory();
+    renderStats();
+  });
+
+  dataBtn.addEventListener("click", () => openSheet(dataSheet));
+  exportDataBtn.addEventListener("click", exportData);
+  importDataInput.addEventListener("change", importData);
+
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") closeSheets();
   });
 }
 
-function populateModels() {
-  const availableIds = new Set(
-    (webllm.prebuiltAppConfig?.model_list || []).map((record) => record.model_id)
-  );
+function loadState() {
+  try {
+    const current = localStorage.getItem(STORAGE_KEY);
+    if (current) return normalizeState(JSON.parse(current));
 
-  let options = PREFERRED_MODELS.filter((model) => availableIds.has(model.id));
+    const v2 = localStorage.getItem(V2_STORAGE_KEY);
+    if (v2) {
+      const migrated = normalizeState(JSON.parse(v2));
+      migrated.version = APP_VERSION;
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(migrated));
+      return migrated;
+    }
+  } catch (error) {
+    console.warn("Picklo state load failed:", error);
+  }
+  return defaultState();
+}
+
+function normalizeState(parsed) {
+  return {
+    ...defaultState(),
+    ...parsed,
+    memories: Array.isArray(parsed?.memories) ? parsed.memories : [],
+    chats: Array.isArray(parsed?.chats) ? parsed.chats : []
+  };
+}
+
+function saveState() {
+  try {
+    state.version = APP_VERSION;
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  } catch (error) {
+    console.warn("Picklo state save failed:", error);
+  }
+}
+
+function makeChat() {
+  return {
+    id: crypto.randomUUID ? crypto.randomUUID() : `chat-${Date.now()}-${Math.random()}`,
+    title: "New chat",
+    mode: state.defaultMode || "general",
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+    messages: []
+  };
+}
+
+function ensureActiveChat() {
+  if (state.chats.some((chat) => chat.id === state.activeChatId)) return;
+
+  if (state.chats.length) {
+    state.activeChatId = state.chats[0].id;
+  } else {
+    const chat = makeChat();
+    state.chats.unshift(chat);
+    state.activeChatId = chat.id;
+  }
+  saveState();
+}
+
+function getActiveChat() {
+  ensureActiveChat();
+  return state.chats.find((chat) => chat.id === state.activeChatId);
+}
+
+function createNewChat() {
+  if (isGenerating) return;
+  const chat = makeChat();
+  state.chats.unshift(chat);
+  state.activeChatId = chat.id;
+  state.activeMode = chat.mode || state.defaultMode || "general";
+  activeFileSources = [];
+  saveState();
+  messageInput.value = "";
+  autoResize();
+  setMode(state.activeMode, false);
+  renderAll();
+  if (engine) messageInput.focus();
+}
+
+function switchChat(id) {
+  if (isGenerating) return;
+  const chat = state.chats.find((item) => item.id === id);
+  if (!chat) return;
+  state.activeChatId = id;
+  state.activeMode = chat.mode || "general";
+  activeFileSources = [];
+  saveState();
+  setMode(state.activeMode, false);
+  renderAll();
+  closeSheets();
+}
+
+function deleteChat(id) {
+  if (isGenerating) return;
+  state.chats = state.chats.filter((chat) => chat.id !== id);
+  if (state.activeChatId === id) state.activeChatId = state.chats[0]?.id || null;
+  ensureActiveChat();
+  saveState();
+  renderAll();
+}
+
+function setMode(mode, persist = true) {
+  if (!MODE_PROMPTS[mode]) mode = "general";
+  state.activeMode = mode;
+
+  const activeChat = state.chats.find((chat) => chat.id === state.activeChatId);
+  if (activeChat) activeChat.mode = mode;
+
+  document.querySelectorAll("[data-mode]").forEach((button) => {
+    button.classList.toggle("active", button.dataset.mode === mode);
+  });
+
+  const label = mode.charAt(0).toUpperCase() + mode.slice(1);
+  activeModeLabel.textContent = label;
+  modeButton.textContent = label;
+  assistantSubtitle.textContent = {
+    general: "Your general-purpose personal AI",
+    write: "Writing, drafting and refinement",
+    code: "Building, debugging and software reasoning",
+    analyze: "Documents, comparisons and structured reasoning"
+  }[mode];
+
+  if (persist) saveState();
+}
+
+function renderAll() {
+  renderChats();
+  renderMessages();
+  renderFiles();
+  renderStats();
+  renderContext();
+}
+
+function renderChats() {
+  const ordered = [...state.chats].sort((a, b) => b.updatedAt - a.updatedAt);
+  renderChatList(chatList, ordered);
+  renderChatList(mobileChatList, ordered);
+}
+
+function renderChatList(container, chats) {
+  container.innerHTML = "";
+  for (const chat of chats) {
+    const row = document.createElement("div");
+    row.className = `chat-item${chat.id === state.activeChatId ? " active" : ""}`;
+
+    const open = document.createElement("button");
+    open.type = "button";
+    open.className = "chat-open";
+    open.textContent = chat.title || "Untitled chat";
+    open.title = chat.title || "Untitled chat";
+    open.addEventListener("click", () => switchChat(chat.id));
+
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "chat-delete";
+    remove.textContent = "×";
+    remove.addEventListener("click", (event) => {
+      event.stopPropagation();
+      deleteChat(chat.id);
+    });
+
+    row.append(open, remove);
+    container.appendChild(row);
+  }
+}
+
+function renderMessages() {
+  const chat = getActiveChat();
+  messages.innerHTML = "";
+
+  if (!chat.messages.length) {
+    messages.innerHTML = `
+      <div class="welcome">
+        <div class="welcome-intro">
+          <img src="assets/picklo-mark.svg" alt="" />
+          <div class="welcome-bubble">
+            <strong>Picklo</strong>
+            Hi. I’m Picklo. Ask me anything, bring me a task, or attach a document and work through it with me.
+            <time>Now</time>
+          </div>
+        </div>
+
+        <div class="welcome-title">What are we doing?</div>
+        <div class="starter-grid">
+          <button data-mode="general" data-prompt="Help me think through something. Ask only the questions you genuinely need." type="button">
+            <span class="starter-glyph ask-glyph">A</span><strong>Ask anything</strong><small>Questions, ideas, decisions</small>
+          </button>
+          <button data-mode="write" data-prompt="Help me write something. First focus on the audience, purpose and strongest structure." type="button">
+            <span class="starter-glyph write-glyph">W</span><strong>Write with Picklo</strong><small>Draft, rewrite, improve</small>
+          </button>
+          <button data-mode="code" data-prompt="Help me build or debug some code. Prioritize a working solution and explain the important choices." type="button">
+            <span class="starter-glyph code-glyph">C</span><strong>Code together</strong><small>Build, debug, explain</small>
+          </button>
+          <button data-mode="analyze" data-prompt="I want to analyze a document or problem carefully. Help me separate evidence, assumptions and conclusions." type="button">
+            <span class="starter-glyph file-glyph">F</span><strong>Analyze something</strong><small>Files, evidence, reasoning</small>
+          </button>
+        </div>
+      </div>`;
+    return;
+  }
+
+  for (const message of chat.messages) {
+    appendMessageToDOM(message.role, message.content, {
+      time: message.createdAt,
+      sources: message.sources || [],
+      scroll: false
+    });
+  }
+  scrollToBottom(false);
+}
+
+function appendMessageToDOM(role, content, options = {}) {
+  const row = document.createElement("article");
+  row.className = `message-row ${role}`;
+
+  if (role === "assistant") {
+    const avatar = document.createElement("div");
+    avatar.className = "message-avatar";
+    avatar.innerHTML = `<img src="assets/picklo-mark.svg" alt="" />`;
+    row.appendChild(avatar);
+  }
+
+  const wrap = document.createElement("div");
+  wrap.className = "message-wrap";
+
+  if (role === "assistant") {
+    const name = document.createElement("div");
+    name.className = "message-name";
+    name.textContent = "Picklo";
+    wrap.appendChild(name);
+  }
+
+  const bubble = document.createElement("div");
+  bubble.className = "message-bubble";
+
+  if (role === "assistant") renderMarkdownInto(bubble, content);
+  else bubble.textContent = content;
+
+  if (options.sources?.length) {
+    const sources = document.createElement("div");
+    sources.className = "source-line";
+    options.sources.forEach((source) => {
+      const chip = document.createElement("span");
+      chip.className = "source-chip";
+      chip.textContent = source;
+      sources.appendChild(chip);
+    });
+    bubble.appendChild(sources);
+  }
+
+  const time = document.createElement("time");
+  time.className = "message-time";
+  time.textContent = formatTime(options.time || Date.now());
+  bubble.appendChild(time);
+
+  wrap.appendChild(bubble);
+  row.appendChild(wrap);
+  messages.appendChild(row);
+
+  if (options.scroll !== false) scrollToBottom();
+  return bubble;
+}
+
+function formatTime(value) {
+  return new Date(value).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+}
+
+function renderStats() {
+  memoryCount.textContent = `${state.memories.length} saved`;
+  panelMemoryCount.textContent = `${state.memories.length} saved`;
+
+  const fileLabel = `${localFiles.length} ${localFiles.length === 1 ? "local file" : "local files"}`;
+  fileCount.textContent = fileLabel;
+  panelFileCount.textContent = `${localFiles.length} available`;
+}
+
+function populateModels() {
+  const records = webllm.prebuiltAppConfig?.model_list || [];
+  const available = new Set(records.map((record) => record.model_id));
+
+  let options = PREFERRED_MODELS.filter((model) => available.has(model.id));
 
   if (!options.length) {
-    options = (webllm.prebuiltAppConfig?.model_list || [])
+    options = records
       .filter((record) => !String(record.model_id).toLowerCase().includes("vision"))
-      .slice(0, 8)
+      .slice(0, 10)
       .map((record) => ({
         id: record.model_id,
         label: friendlyModelName(record.model_id),
-        tier: "Available"
+        note: "Available"
       }));
   }
 
   modelSelect.innerHTML = "";
-
   for (const model of options) {
     const option = document.createElement("option");
     option.value = model.id;
-    option.textContent = `${model.label} · ${model.tier}`;
+    option.textContent = `${model.label} — ${model.note}`;
     modelSelect.appendChild(option);
   }
 
@@ -278,323 +621,38 @@ function friendlyModelName(id) {
     .replaceAll("-", " ");
 }
 
-function loadState() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return defaultState();
-
-    const parsed = JSON.parse(raw);
-
-    return {
-      ...defaultState(),
-      ...parsed,
-      memories: Array.isArray(parsed.memories) ? parsed.memories : [],
-      chats: Array.isArray(parsed.chats) ? parsed.chats : []
-    };
-  } catch {
-    return defaultState();
-  }
-}
-
-function saveState() {
-  try {
-    state.version = APP_VERSION;
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-  } catch (error) {
-    console.error("Could not save Picklo state:", error);
-    showStorageStatus("Local storage is unavailable");
-  }
-}
-
-function ensureActiveChat() {
-  const activeExists = state.chats.some((chat) => chat.id === state.activeChatId);
-
-  if (activeExists) return;
-
-  if (state.chats.length) {
-    state.activeChatId = state.chats[0].id;
-  } else {
-    const chat = makeChat();
-    state.chats.unshift(chat);
-    state.activeChatId = chat.id;
-  }
-
-  saveState();
-}
-
-function makeChat() {
-  return {
-    id: crypto.randomUUID ? crypto.randomUUID() : `chat-${Date.now()}-${Math.random()}`,
-    title: "New chat",
-    createdAt: Date.now(),
-    updatedAt: Date.now(),
-    messages: []
-  };
-}
-
-function getActiveChat() {
-  ensureActiveChat();
-  return state.chats.find((chat) => chat.id === state.activeChatId);
-}
-
-function createNewChat() {
-  const chat = makeChat();
-  state.chats.unshift(chat);
-  state.activeChatId = chat.id;
-  saveState();
-  renderAll();
-  messageInput.value = "";
-  autoResize();
-  if (engine) messageInput.focus();
-}
-
-function switchChat(chatId) {
-  if (isGenerating) return;
-  if (!state.chats.some((chat) => chat.id === chatId)) return;
-
-  state.activeChatId = chatId;
-  saveState();
-  renderAll();
-  closeSidebar();
-}
-
-function deleteChat(chatId) {
-  if (isGenerating) return;
-
-  state.chats = state.chats.filter((chat) => chat.id !== chatId);
-
-  if (state.activeChatId === chatId) {
-    state.activeChatId = state.chats[0]?.id || null;
-  }
-
-  ensureActiveChat();
-  saveState();
-  renderAll();
-}
-
-function renderAll() {
-  renderSidebar();
-  renderMessages();
-  renderTopbar();
-}
-
-function renderSidebar() {
-  chatList.innerHTML = "";
-
-  const orderedChats = [...state.chats].sort((a, b) => b.updatedAt - a.updatedAt);
-
-  if (!orderedChats.length) {
-    const empty = document.createElement("div");
-    empty.className = "empty-chats";
-    empty.textContent = "Your saved chats will appear here.";
-    chatList.appendChild(empty);
-  }
-
-  orderedChats.forEach((chat) => {
-    const row = document.createElement("div");
-    row.className = `chat-item${chat.id === state.activeChatId ? " active" : ""}`;
-
-    const open = document.createElement("button");
-    open.className = "chat-open";
-    open.type = "button";
-    open.textContent = chat.title || "Untitled chat";
-    open.title = chat.title || "Untitled chat";
-    open.addEventListener("click", () => switchChat(chat.id));
-
-    const remove = document.createElement("button");
-    remove.className = "chat-delete";
-    remove.type = "button";
-    remove.textContent = "×";
-    remove.title = "Delete chat";
-    remove.addEventListener("click", (event) => {
-      event.stopPropagation();
-      deleteChat(chat.id);
-    });
-
-    row.append(open, remove);
-    chatList.appendChild(row);
-  });
-
-  memoryCount.textContent = `${state.memories.length} saved`;
-}
-
-function renderTopbar() {
-  const chat = getActiveChat();
-  activeChatTitle.textContent = chat.title || "New chat";
-
-  if (loadedModelId) {
-    topbarStatus.textContent =
-      loadedModelId === state.selectedModel
-        ? `${friendlyModelName(loadedModelId)} · local`
-        : "Selected model not loaded";
-  } else {
-    topbarStatus.textContent = "Local-first AI";
-  }
-}
-
-function renderMessages() {
-  messages.innerHTML = "";
-  const chat = getActiveChat();
-
-  if (!chat.messages.length) {
-    messages.appendChild(welcomeTemplate.content.cloneNode(true));
-    return;
-  }
-
-  for (const message of chat.messages) {
-    appendMessageToDOM(message.role, message.content, false);
-  }
-
-  scrollToBottom(false);
-}
-
-function appendMessageToDOM(role, content, shouldScroll = true) {
-  const row = document.createElement("article");
-  row.className = `message-row ${role}`;
-
-  if (role === "assistant") {
-    const avatar = document.createElement("div");
-    avatar.className = "avatar";
-    avatar.textContent = "AI";
-    row.appendChild(avatar);
-  }
-
-  const body = document.createElement("div");
-  body.className = "message-content";
-
-  if (role === "assistant") {
-    renderMarkdownInto(body, content);
-  } else {
-    body.textContent = content;
-  }
-
-  row.appendChild(body);
-  messages.appendChild(row);
-
-  if (shouldScroll) scrollToBottom();
-  return body;
-}
-
-function addError(text) {
-  const error = document.createElement("div");
-  error.className = "message-error";
-  error.textContent = text;
-  messages.appendChild(error);
-  scrollToBottom();
-}
-
-function addMemory(text) {
-  const cleaned = text.trim();
-  if (!cleaned) return;
-
-  if (!state.memories.some((memory) => memory.text.toLowerCase() === cleaned.toLowerCase())) {
-    state.memories.unshift({
-      id: crypto.randomUUID ? crypto.randomUUID() : `memory-${Date.now()}-${Math.random()}`,
-      text: cleaned,
-      createdAt: Date.now()
-    });
-  }
-
-  saveState();
-  renderSidebar();
-}
-
-function renderMemory() {
-  memoryList.innerHTML = "";
-
-  if (!state.memories.length) {
-    const empty = document.createElement("div");
-    empty.className = "memory-empty";
-    empty.textContent = 'No memory saved yet. You can also say "remember that ..." in chat.';
-    memoryList.appendChild(empty);
-  }
-
-  for (const memory of state.memories) {
-    const item = document.createElement("div");
-    item.className = "memory-item";
-
-    const text = document.createElement("p");
-    text.textContent = memory.text;
-
-    const remove = document.createElement("button");
-    remove.className = "memory-delete";
-    remove.type = "button";
-    remove.textContent = "Delete";
-    remove.addEventListener("click", () => {
-      state.memories = state.memories.filter((entry) => entry.id !== memory.id);
-      saveState();
-      renderMemory();
-      renderSidebar();
-    });
-
-    item.append(text, remove);
-    memoryList.appendChild(item);
-  }
-
-  memoryCount.textContent = `${state.memories.length} saved`;
-}
-
-function buildSystemPrompt() {
-  const memoryText = state.memories.length
-    ? `\n\nPERSISTENT MEMORY FROM THE USER:\n${state.memories
-        .map((memory, index) => `${index + 1}. ${memory.text}`)
-        .join("\n")}\nUse this memory only when relevant.`
-    : "";
-
-  return BASE_SYSTEM_PROMPT + memoryText;
-}
-
-function buildMessagesForModel(chat) {
-  const recent = chat.messages.slice(-24);
-
-  return [
-    { role: "system", content: buildSystemPrompt() },
-    ...recent.map((message) => ({
-      role: message.role,
-      content: message.content
-    }))
-  ];
-}
-
 async function loadSelectedModel() {
   const selected = modelSelect.value;
   if (!selected || isGenerating) return;
 
   if (!("gpu" in navigator)) {
     setRuntime("WebGPU unavailable", "Use a WebGPU-capable browser", "error");
-    addError(
-      "WebGPU is unavailable in this browser. Open Picklo in a recent WebGPU-capable browser."
-    );
+    closeSheets();
+    addError("WebGPU is unavailable in this browser. Picklo V3 needs a recent WebGPU-capable browser for local inference.");
     return;
   }
 
   loadModelBtn.disabled = true;
-  modelSelect.disabled = true;
-  messageInput.disabled = true;
-  sendBtn.disabled = true;
   progressWrap.classList.remove("hidden");
   progressBar.style.width = "0%";
   progressPercent.textContent = "0%";
-  setRuntime("Loading model", friendlyModelName(selected), "loading");
-  loadModelBtn.textContent = loadedModelId ? "Switching…" : "Loading…";
+  setRuntime("Starting Picklo", friendlyModelName(selected), "loading");
+  loadModelBtn.textContent = loadedModelId ? "Switching model…" : "Starting model…";
 
   const onProgress = (report) => {
-    const text = report?.text || "Preparing model…";
-    const value =
-      typeof report?.progress === "number"
-        ? Math.round(report.progress * 100)
-        : extractPercent(text) ?? 0;
+    const text = report?.text || "Preparing Picklo…";
+    const percent = typeof report?.progress === "number"
+      ? Math.round(report.progress * 100)
+      : extractPercent(text) ?? 0;
 
     progressText.textContent = text;
-    progressPercent.textContent = `${value}%`;
-    progressBar.style.width = `${value}%`;
+    progressPercent.textContent = `${percent}%`;
+    progressBar.style.width = `${percent}%`;
   };
 
   try {
     if (!engine) {
-      engine = new webllm.MLCEngine({
-        initProgressCallback: onProgress
-      });
+      engine = new webllm.MLCEngine({ initProgressCallback: onProgress });
     } else if (typeof engine.setInitProgressCallback === "function") {
       engine.setInitProgressCallback(onProgress);
     }
@@ -607,29 +665,55 @@ async function loadSelectedModel() {
 
     progressBar.style.width = "100%";
     progressPercent.textContent = "100%";
-    progressText.textContent = "Model ready";
+    progressText.textContent = "Picklo is ready";
+    setRuntime("Picklo is ready", friendlyModelName(selected), "ready");
 
-    setRuntime("AI ready", friendlyModelName(selected), "ready");
-    loadModelBtn.textContent = "AI ready";
     messageInput.disabled = false;
     sendBtn.disabled = false;
     messageInput.placeholder = "Message Picklo…";
-    renderTopbar();
+    loadModelBtn.textContent = "Model ready";
 
-    setTimeout(() => {
-      progressWrap.classList.add("hidden");
-    }, 850);
-
+    setTimeout(() => progressWrap.classList.add("hidden"), 850);
+    setTimeout(closeSheets, 220);
     messageInput.focus();
   } catch (error) {
     console.error(error);
     loadedModelId = null;
-    setRuntime("Load failed", "Model could not start", "error");
+    setRuntime("Picklo could not start", "Try another supported model", "error");
     loadModelBtn.textContent = "Try again";
-    addError(`Could not load the selected model. ${error?.message || String(error)}`);
+    addError(`The selected model could not start. ${error?.message || String(error)}`);
   } finally {
     loadModelBtn.disabled = false;
-    modelSelect.disabled = false;
+  }
+}
+
+function extractPercent(text) {
+  const match = String(text || "").match(/(\d+(?:\.\d+)?)%/);
+  return match ? Math.max(0, Math.min(100, Math.round(Number(match[1])))) : null;
+}
+
+function setRuntime(title, detail, stateName = "idle") {
+  stateTitle.textContent = title;
+  stateDetail.textContent = detail;
+  stateDot.className = "state-dot";
+  presence.className = "presence";
+
+  if (stateName !== "idle") {
+    stateDot.classList.add(stateName);
+    presence.classList.add(stateName);
+  }
+
+  if (stateName === "ready") {
+    const modelName = friendlyModelName(loadedModelId || state.selectedModel);
+    modelStatus.textContent = `${modelName} • Local`;
+    panelModelName.textContent = modelName;
+    startButton.textContent = "Ready";
+    startButton.classList.add("ready");
+  } else {
+    modelStatus.textContent = detail;
+    panelModelName.textContent = detail;
+    startButton.textContent = stateName === "loading" ? "Starting…" : "Start Picklo";
+    startButton.classList.remove("ready");
   }
 }
 
@@ -638,51 +722,41 @@ async function sendMessage() {
   if (!content || !engine || isGenerating) return;
 
   const chat = getActiveChat();
-
   isGenerating = true;
   generationWasStopped = false;
-  setComposerGenerating(true);
+  setGeneratingUI(true);
 
-  chat.messages.push({
-    role: "user",
-    content,
-    createdAt: Date.now()
-  });
+  const userMessage = { role: "user", content, createdAt: Date.now() };
+  chat.messages.push(userMessage);
+  chat.mode = state.activeMode;
 
-  if (chat.title === "New chat") {
-    chat.title = makeTitle(content);
-  }
-
+  if (chat.title === "New chat") chat.title = makeTitle(content);
   chat.updatedAt = Date.now();
-  state.chats.sort((a, b) => b.updatedAt - a.updatedAt);
-  saveState();
 
-  messages.innerHTML = "";
-  for (const message of chat.messages) {
-    appendMessageToDOM(message.role, message.content, false);
-  }
+  const remembered = parseRememberCommand(content);
+  if (remembered) addMemory(remembered);
+
+  const retrieved = await retrieveLocalContext(content);
+  const sourceNames = [...new Set(retrieved.map((item) => item.name))];
+  activeFileSources = sourceNames;
+
+  saveState();
+  renderChats();
+  renderMessages();
+  renderContext();
 
   messageInput.value = "";
   autoResize();
-  renderSidebar();
-  renderTopbar();
-  scrollToBottom();
 
-  const remembered = parseRememberCommand(content);
-  if (remembered) {
-    addMemory(remembered);
-  }
-
-  const modelMessages = buildMessagesForModel(chat);
-  const assistantBody = appendMessageToDOM("assistant", "");
-  assistantBody.classList.add("typing-caret");
-  assistantBody.textContent = "";
+  const assistantBubble = appendMessageToDOM("assistant", "", { time: Date.now() });
+  assistantBubble.classList.add("typing");
+  assistantBubble.textContent = "";
 
   let fullReply = "";
 
   try {
     const stream = await engine.chat.completions.create({
-      messages: modelMessages,
+      messages: buildModelMessages(chat, retrieved),
       temperature: 0.7,
       top_p: 0.9,
       stream: true,
@@ -692,77 +766,109 @@ async function sendMessage() {
     for await (const chunk of stream) {
       const delta = chunk.choices?.[0]?.delta?.content || "";
       if (!delta) continue;
-
       fullReply += delta;
-      assistantBody.textContent = fullReply;
+      assistantBubble.textContent = fullReply;
       scrollToBottom();
     }
 
-    assistantBody.classList.remove("typing-caret");
+    assistantBubble.classList.remove("typing");
 
     if (generationWasStopped) {
       fullReply = fullReply.trim()
         ? `${fullReply.trim()}\n\n[Generation stopped]`
         : "[Generation stopped]";
     } else if (!fullReply.trim()) {
-      fullReply = "I could not generate a response.";
+      fullReply = "I could not complete that response.";
     }
-
-    renderMarkdownInto(assistantBody, fullReply);
 
     chat.messages.push({
       role: "assistant",
       content: fullReply,
-      createdAt: Date.now()
+      createdAt: Date.now(),
+      sources: sourceNames
     });
-
     chat.updatedAt = Date.now();
+
     saveState();
-    renderSidebar();
+    renderMessages();
+    renderChats();
   } catch (error) {
-    assistantBody.classList.remove("typing-caret");
+    assistantBubble.classList.remove("typing");
 
     if (generationWasStopped) {
       fullReply = fullReply.trim()
         ? `${fullReply.trim()}\n\n[Generation stopped]`
         : "[Generation stopped]";
 
-      renderMarkdownInto(assistantBody, fullReply);
-
       chat.messages.push({
         role: "assistant",
         content: fullReply,
-        createdAt: Date.now()
+        createdAt: Date.now(),
+        sources: sourceNames
       });
 
       chat.updatedAt = Date.now();
       saveState();
+      renderMessages();
     } else {
-      assistantBody.remove();
-      addError(`Generation failed. ${error?.message || String(error)}`);
+      assistantBubble.closest(".message-row")?.remove();
+      addError(`Picklo could not finish that response. ${error?.message || String(error)}`);
     }
   } finally {
     isGenerating = false;
-    setComposerGenerating(false);
+    setGeneratingUI(false);
     messageInput.focus();
   }
 }
 
+function buildModelMessages(chat, retrieved) {
+  const memoryBlock = state.memories.length
+    ? `PERSISTENT MEMORY:\n${state.memories.map((item, index) => `${index + 1}. ${item.text}`).join("\n")}`
+    : "";
+
+  const localContext = retrieved.length
+    ? `LOCAL FILE CONTEXT:\n${retrieved.map((item, index) => `[${index + 1}] Source: ${item.name}\n${item.text}`).join("\n\n")}`
+    : "";
+
+  const system = [
+    BASE_SYSTEM_PROMPT,
+    `CURRENT MODE:\n${MODE_PROMPTS[state.activeMode] || MODE_PROMPTS.general}`,
+    memoryBlock,
+    localContext
+  ].filter(Boolean).join("\n\n");
+
+  return [
+    { role: "system", content: system },
+    ...chat.messages.slice(-24).map((message) => ({
+      role: message.role,
+      content: message.content
+    }))
+  ];
+}
+
+function makeTitle(text) {
+  const clean = text.replace(/\s+/g, " ").trim();
+  return clean.length <= 43 ? clean : `${clean.slice(0, 43).trim()}…`;
+}
+
+function parseRememberCommand(text) {
+  const match = text.match(/^\s*remember(?:\s+that)?\s+(.+)/is);
+  return match?.[1]?.trim() || null;
+}
+
 async function stopGeneration() {
   if (!isGenerating || !engine) return;
-
   generationWasStopped = true;
   stopBtn.disabled = true;
   stopBtn.textContent = "Stopping…";
-
   try {
     await engine.interruptGenerate();
   } catch (error) {
-    console.warn("Could not interrupt generation:", error);
+    console.warn("Picklo generation interruption failed:", error);
   }
 }
 
-function setComposerGenerating(generating) {
+function setGeneratingUI(generating) {
   messageInput.disabled = generating || !engine;
   sendBtn.disabled = generating || !engine;
   stopBtn.classList.toggle("hidden", !generating);
@@ -770,33 +876,380 @@ function setComposerGenerating(generating) {
   stopBtn.textContent = "Stop";
 }
 
-function parseRememberCommand(content) {
-  const match = content.match(/^\s*remember(?:\s+that)?\s+(.+)/is);
-  return match?.[1]?.trim() || null;
+function addError(text) {
+  const card = document.createElement("div");
+  card.className = "error-card";
+  card.textContent = text;
+  messages.appendChild(card);
+  scrollToBottom();
 }
 
-function makeTitle(text) {
-  const clean = text.replace(/\s+/g, " ").trim();
-  if (clean.length <= 42) return clean;
-  return `${clean.slice(0, 42).trim()}…`;
+function addMemory(text) {
+  const cleaned = text.trim();
+  if (!cleaned) return;
+
+  if (!state.memories.some((item) => item.text.toLowerCase() === cleaned.toLowerCase())) {
+    state.memories.unshift({
+      id: crypto.randomUUID ? crypto.randomUUID() : `memory-${Date.now()}`,
+      text: cleaned,
+      createdAt: Date.now()
+    });
+  }
+  saveState();
+  renderStats();
 }
 
-function extractPercent(text) {
-  const match = String(text || "").match(/(\d+(?:\.\d+)?)%/);
-  if (!match) return null;
-  return Math.max(0, Math.min(100, Math.round(Number(match[1]))));
+function renderMemory() {
+  memoryList.innerHTML = "";
+
+  if (!state.memories.length) {
+    const empty = document.createElement("div");
+    empty.className = "memory-empty";
+    empty.textContent = 'No memory saved yet. You can also type "remember that ..." in a chat.';
+    memoryList.appendChild(empty);
+    return;
+  }
+
+  for (const memory of state.memories) {
+    const item = document.createElement("div");
+    item.className = "memory-item";
+
+    const copy = document.createElement("p");
+    copy.textContent = memory.text;
+
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "memory-delete";
+    remove.textContent = "Delete";
+    remove.addEventListener("click", () => {
+      state.memories = state.memories.filter((entry) => entry.id !== memory.id);
+      saveState();
+      renderMemory();
+      renderStats();
+    });
+
+    item.append(copy, remove);
+    memoryList.appendChild(item);
+  }
 }
 
-function setRuntime(title, detail, status = "idle") {
-  runtimeStatus.textContent = title;
-  runtimeDetail.textContent = detail;
-  statusDot.className = "status-dot";
-  if (status !== "idle") statusDot.classList.add(status);
+async function handleFiles(event) {
+  const files = [...(event.target.files || [])];
+  event.target.value = "";
+  if (!files.length) return;
+
+  composerNote.textContent = "Adding files locally…";
+
+  for (const file of files) {
+    try {
+      const text = await extractFileText(file);
+      const cleaned = text.replace(/\u0000/g, "").trim().slice(0, MAX_FILE_CHARS);
+      if (!cleaned) throw new Error("No readable text was found.");
+
+      await putLocalFile({
+        id: crypto.randomUUID ? crypto.randomUUID() : `file-${Date.now()}-${Math.random()}`,
+        name: file.name,
+        type: file.type || file.name.split(".").pop() || "text",
+        size: file.size,
+        text: cleaned,
+        createdAt: Date.now()
+      });
+    } catch (error) {
+      alert(`${file.name}: ${error?.message || "Could not read this file."}`);
+    }
+  }
+
+  localFiles = await listLocalFiles();
+  renderFiles();
+  renderStats();
+  composerNote.textContent = "Files added. Picklo can now retrieve them when relevant.";
+  setTimeout(() => {
+    composerNote.textContent = "Chats, memory and files stay in this browser.";
+  }, 2500);
+}
+
+async function extractFileText(file) {
+  const lower = file.name.toLowerCase();
+  if (file.type === "application/pdf" || lower.endsWith(".pdf")) {
+    return extractPdfText(file);
+  }
+  return file.text();
+}
+
+async function extractPdfText(file) {
+  const pdfjsLib = await import("https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/build/pdf.min.mjs");
+  pdfjsLib.GlobalWorkerOptions.workerSrc =
+    "https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/build/pdf.worker.min.mjs";
+
+  const data = new Uint8Array(await file.arrayBuffer());
+  const pdf = await pdfjsLib.getDocument({ data }).promise;
+  const pages = [];
+  let totalChars = 0;
+
+  for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber++) {
+    const page = await pdf.getPage(pageNumber);
+    const content = await page.getTextContent();
+    const text = content.items.map((item) => item.str).join(" ");
+    const pageText = `Page ${pageNumber}\n${text}`;
+    pages.push(pageText);
+    totalChars += pageText.length;
+    if (totalChars >= MAX_FILE_CHARS) break;
+  }
+
+  return pages.join("\n\n");
+}
+
+function openFileDB() {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(FILE_DB, 1);
+
+    request.onupgradeneeded = () => {
+      const db = request.result;
+      if (!db.objectStoreNames.contains(FILE_STORE)) {
+        db.createObjectStore(FILE_STORE, { keyPath: "id" });
+      }
+    };
+
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+async function putLocalFile(doc) {
+  const db = await openFileDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(FILE_STORE, "readwrite");
+    tx.objectStore(FILE_STORE).put(doc);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+async function listLocalFiles() {
+  try {
+    const db = await openFileDB();
+    return await new Promise((resolve, reject) => {
+      const tx = db.transaction(FILE_STORE, "readonly");
+      const request = tx.objectStore(FILE_STORE).getAll();
+      request.onsuccess = () => resolve((request.result || []).sort((a, b) => b.createdAt - a.createdAt));
+      request.onerror = () => reject(request.error);
+    });
+  } catch {
+    return [];
+  }
+}
+
+async function deleteLocalFile(id) {
+  const db = await openFileDB();
+  await new Promise((resolve, reject) => {
+    const tx = db.transaction(FILE_STORE, "readwrite");
+    tx.objectStore(FILE_STORE).delete(id);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+
+  localFiles = await listLocalFiles();
+  renderFiles();
+  renderStats();
+}
+
+function renderFiles() {
+  sheetFileList.innerHTML = "";
+
+  if (!localFiles.length) {
+    const empty = document.createElement("div");
+    empty.className = "file-empty";
+    empty.textContent = "No local files yet.";
+    sheetFileList.appendChild(empty);
+    return;
+  }
+
+  for (const file of localFiles) {
+    const row = document.createElement("div");
+    row.className = "file-item";
+
+    const badge = document.createElement("div");
+    badge.className = "file-badge";
+    badge.textContent = fileLabel(file.name);
+
+    const copy = document.createElement("div");
+    copy.className = "file-copy";
+    const strong = document.createElement("strong");
+    strong.textContent = file.name;
+    const small = document.createElement("small");
+    small.textContent = `${Math.round(file.text.length / 1000)}k characters • ${new Date(file.createdAt).toLocaleDateString()}`;
+    copy.append(strong, small);
+
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "file-remove";
+    remove.textContent = "×";
+    remove.title = "Remove file";
+    remove.addEventListener("click", () => deleteLocalFile(file.id));
+
+    row.append(badge, copy, remove);
+    sheetFileList.appendChild(row);
+  }
+}
+
+function fileLabel(name) {
+  const ext = String(name).split(".").pop()?.toUpperCase() || "TXT";
+  return ext.slice(0, 3);
+}
+
+async function retrieveLocalContext(query) {
+  if (!localFiles.length) return [];
+
+  const tokens = tokenSet(query);
+  if (!tokens.size) return [];
+
+  const scored = [];
+
+  for (const file of localFiles) {
+    const chunks = chunkText(file.text);
+    chunks.forEach((chunk, index) => {
+      const lower = chunk.toLowerCase();
+      let score = 0;
+
+      for (const token of tokens) {
+        if (token.length < 3) continue;
+        const hits = lower.split(token).length - 1;
+        score += Math.min(hits, 5) * (token.length >= 7 ? 2.2 : 1);
+        if (file.name.toLowerCase().includes(token)) score += 2.5;
+      }
+
+      if (score > 0) {
+        scored.push({ name: file.name, text: chunk, score, index });
+      }
+    });
+  }
+
+  scored.sort((a, b) => b.score - a.score);
+
+  const chosen = [];
+  let chars = 0;
+
+  for (const item of scored) {
+    if (chosen.length >= 5) break;
+    if (chars + item.text.length > MAX_CONTEXT_CHARS && chosen.length) continue;
+    chosen.push(item);
+    chars += item.text.length;
+  }
+
+  return chosen;
+}
+
+function tokenSet(text) {
+  const stop = new Set([
+    "the","and","that","this","with","from","what","when","where","which","would",
+    "could","should","have","has","had","into","about","your","you","are","was",
+    "were","for","but","not","can","how","why","who","their","there","than","then"
+  ]);
+
+  return new Set(
+    String(text)
+      .toLowerCase()
+      .match(/[a-z0-9][a-z0-9_-]{2,}/g)
+      ?.filter((token) => !stop.has(token)) || []
+  );
+}
+
+function chunkText(text) {
+  const size = 1500;
+  const overlap = 220;
+  const chunks = [];
+
+  for (let start = 0; start < text.length; start += size - overlap) {
+    chunks.push(text.slice(start, start + size));
+    if (start + size >= text.length) break;
+  }
+
+  return chunks;
+}
+
+function renderContext() {
+  if (!activeFileSources.length) {
+    contextBanner.classList.add("hidden");
+    return;
+  }
+
+  contextText.textContent = `Using ${activeFileSources.join(", ")}`;
+  contextBanner.classList.remove("hidden");
+}
+
+async function exportData() {
+  const docs = await listLocalFiles();
+  const payload = {
+    app: "Picklo",
+    version: APP_VERSION,
+    exportedAt: new Date().toISOString(),
+    state,
+    files: docs
+  };
+
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `picklo-v3-backup-${new Date().toISOString().slice(0, 10)}.json`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
+async function importData(event) {
+  const file = event.target.files?.[0];
+  event.target.value = "";
+  if (!file) return;
+
+  try {
+    const parsed = JSON.parse(await file.text());
+    const importedState = parsed.state || parsed;
+
+    if (!Array.isArray(importedState.chats) || !Array.isArray(importedState.memories)) {
+      throw new Error("This is not a valid Picklo V3 backup.");
+    }
+
+    if (!confirm("Replace this browser's current Picklo data with the imported backup?")) return;
+
+    state = normalizeState(importedState);
+    ensureActiveChat();
+    saveState();
+
+    if (Array.isArray(parsed.files)) {
+      for (const doc of parsed.files) {
+        if (doc?.id && typeof doc.text === "string") await putLocalFile(doc);
+      }
+    }
+
+    localFiles = await listLocalFiles();
+    populateModels();
+    setMode(state.activeMode || state.defaultMode || "general", false);
+    renderAll();
+    closeSheets();
+  } catch (error) {
+    alert(error?.message || "Could not import this Picklo backup.");
+  }
+}
+
+function openSheet(sheet) {
+  [settingsSheet, memorySheet, filesSheet, dataSheet, conversationsSheet, modeSheet]
+    .forEach((item) => item.classList.add("hidden"));
+
+  sheet.classList.remove("hidden");
+  backdrop.classList.remove("hidden");
+}
+
+function closeSheets() {
+  [settingsSheet, memorySheet, filesSheet, dataSheet, conversationsSheet, modeSheet]
+    .forEach((item) => item.classList.add("hidden"));
+  backdrop.classList.add("hidden");
 }
 
 function autoResize() {
   messageInput.style.height = "auto";
-  messageInput.style.height = `${Math.min(messageInput.scrollHeight, 170)}px`;
+  messageInput.style.height = `${Math.min(messageInput.scrollHeight, 135)}px`;
 }
 
 function scrollToBottom(smooth = true) {
@@ -808,129 +1261,24 @@ function scrollToBottom(smooth = true) {
   });
 }
 
-function openSidebar() {
-  sidebar.classList.add("open");
-  if (window.innerWidth <= 760) {
-    overlay.classList.remove("hidden");
-  }
-}
-
-function closeSidebar() {
-  sidebar.classList.remove("open");
-  if (!isAnyModalOpen()) {
-    overlay.classList.add("hidden");
-  }
-}
-
-function openModal(modal) {
-  closeSidebar();
-  memoryModal.classList.add("hidden");
-  dataModal.classList.add("hidden");
-  modal.classList.remove("hidden");
-  overlay.classList.remove("hidden");
-}
-
-function closeModals() {
-  memoryModal.classList.add("hidden");
-  dataModal.classList.add("hidden");
-  if (!sidebar.classList.contains("open")) {
-    overlay.classList.add("hidden");
-  }
-}
-
-function isAnyModalOpen() {
-  return !memoryModal.classList.contains("hidden") || !dataModal.classList.contains("hidden");
-}
-
-function exportData() {
-  const payload = {
-    app: "Picklo",
-    version: APP_VERSION,
-    exportedAt: new Date().toISOString(),
-    state
-  };
-
-  const blob = new Blob([JSON.stringify(payload, null, 2)], {
-    type: "application/json"
-  });
-
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = `picklo-v2-backup-${new Date().toISOString().slice(0, 10)}.json`;
-  document.body.appendChild(anchor);
-  anchor.click();
-  anchor.remove();
-  URL.revokeObjectURL(url);
-
-  showStorageStatus("Backup exported");
-}
-
-async function importData(event) {
-  const file = event.target.files?.[0];
-  event.target.value = "";
-  if (!file) return;
-
-  try {
-    const parsed = JSON.parse(await file.text());
-    const imported = parsed.state || parsed;
-
-    if (!Array.isArray(imported.chats) || !Array.isArray(imported.memories)) {
-      throw new Error("This is not a valid Picklo V2 backup.");
-    }
-
-    if (!window.confirm("Replace this browser's current Picklo V2 data with the imported backup?")) {
-      return;
-    }
-
-    state = {
-      ...defaultState(),
-      ...imported,
-      chats: imported.chats,
-      memories: imported.memories
-    };
-
-    ensureActiveChat();
-    saveState();
-    populateModels();
-    renderAll();
-    closeModals();
-    showStorageStatus("Backup imported");
-  } catch (error) {
-    window.alert(error?.message || "Could not import that file.");
-  }
-}
-
-function showStorageStatus(text) {
-  storageStatus.textContent = text;
-  clearTimeout(showStorageStatus.timer);
-  showStorageStatus.timer = setTimeout(() => {
-    storageStatus.textContent = "Chats and memory stay in this browser";
-  }, 2200);
-}
-
 function renderMarkdownInto(container, markdown) {
   container.innerHTML = "";
-
   const source = String(markdown || "");
-  const fenceRegex = /```([^\n`]*)\n?([\s\S]*?)```/g;
-  let lastIndex = 0;
+  const fence = /```([^\n`]*)\n?([\s\S]*?)```/g;
+  let index = 0;
   let match;
 
-  while ((match = fenceRegex.exec(source)) !== null) {
-    renderTextMarkdown(container, source.slice(lastIndex, match.index));
-
-    const language = (match[1] || "code").trim() || "code";
-    const code = match[2].replace(/\n$/, "");
+  while ((match = fence.exec(source)) !== null) {
+    renderTextMarkdown(container, source.slice(index, match.index));
 
     const block = document.createElement("div");
     block.className = "code-block";
 
-    const header = document.createElement("div");
-    header.className = "code-header";
+    const head = document.createElement("div");
+    head.className = "code-head";
 
-    const label = document.createElement("span");
-    label.textContent = language;
+    const language = document.createElement("span");
+    language.textContent = (match[1] || "code").trim() || "code";
 
     const copy = document.createElement("button");
     copy.type = "button";
@@ -938,60 +1286,56 @@ function renderMarkdownInto(container, markdown) {
     copy.textContent = "Copy";
 
     const pre = document.createElement("pre");
-    const codeEl = document.createElement("code");
-    codeEl.textContent = code;
-    pre.appendChild(codeEl);
+    const code = document.createElement("code");
+    code.textContent = match[2].replace(/\n$/, "");
+    pre.appendChild(code);
 
-    header.append(label, copy);
-    block.append(header, pre);
+    head.append(language, copy);
+    block.append(head, pre);
     container.appendChild(block);
-
-    lastIndex = fenceRegex.lastIndex;
+    index = fence.lastIndex;
   }
 
-  renderTextMarkdown(container, source.slice(lastIndex));
+  renderTextMarkdown(container, source.slice(index));
 }
 
 function renderTextMarkdown(container, text) {
   if (!text) return;
 
   const lines = text.replace(/\r/g, "").split("\n");
+  let paragraph = [];
   let list = null;
   let listType = null;
-  let paragraphLines = [];
 
   const flushParagraph = () => {
-    if (!paragraphLines.length) return;
-    const paragraph = document.createElement("p");
-    appendInlineMarkdown(paragraph, paragraphLines.join(" "));
-    container.appendChild(paragraph);
-    paragraphLines = [];
+    if (!paragraph.length) return;
+    const p = document.createElement("p");
+    appendInline(p, paragraph.join(" "));
+    container.appendChild(p);
+    paragraph = [];
   };
 
-  const flushList = () => {
+  const resetList = () => {
     list = null;
     listType = null;
   };
 
-  for (const rawLine of lines) {
-    const line = rawLine.trimEnd();
-    const trimmed = line.trim();
+  for (const raw of lines) {
+    const trimmed = raw.trim();
 
     if (!trimmed) {
       flushParagraph();
-      flushList();
+      resetList();
       continue;
     }
 
     const heading = trimmed.match(/^(#{1,3})\s+(.+)$/);
     if (heading) {
       flushParagraph();
-      flushList();
-
-      const level = Math.min(3, heading[1].length);
-      const element = document.createElement(`h${level}`);
-      appendInlineMarkdown(element, heading[2]);
-      container.appendChild(element);
+      resetList();
+      const h = document.createElement(`h${Math.min(3, heading[1].length)}`);
+      appendInline(h, heading[2]);
+      container.appendChild(h);
       continue;
     }
 
@@ -1000,34 +1344,34 @@ function renderTextMarkdown(container, text) {
 
     if (unordered || ordered) {
       flushParagraph();
+      const wanted = ordered ? "ol" : "ul";
 
-      const wantedType = ordered ? "ol" : "ul";
-      if (!list || listType !== wantedType) {
-        flushList();
-        list = document.createElement(wantedType);
-        listType = wantedType;
+      if (!list || listType !== wanted) {
+        resetList();
+        list = document.createElement(wanted);
+        listType = wanted;
         container.appendChild(list);
       }
 
-      const item = document.createElement("li");
-      appendInlineMarkdown(item, (ordered || unordered)[1]);
-      list.appendChild(item);
+      const li = document.createElement("li");
+      appendInline(li, (unordered || ordered)[1]);
+      list.appendChild(li);
       continue;
     }
 
-    flushList();
-    paragraphLines.push(trimmed);
+    resetList();
+    paragraph.push(trimmed);
   }
 
   flushParagraph();
 }
 
-function appendInlineMarkdown(parent, text) {
-  const tokenRegex = /(`[^`]+`|\*\*[^*]+\*\*|__[^_]+__|\*[^*]+\*)/g;
+function appendInline(parent, text) {
+  const regex = /(`[^`]+`|\*\*[^*]+\*\*|__[^_]+__|\*[^*]+\*)/g;
   let index = 0;
   let match;
 
-  while ((match = tokenRegex.exec(text)) !== null) {
+  while ((match = regex.exec(text)) !== null) {
     if (match.index > index) {
       parent.appendChild(document.createTextNode(text.slice(index, match.index)));
     }
@@ -1042,13 +1386,13 @@ function appendInlineMarkdown(parent, text) {
       const strong = document.createElement("strong");
       strong.textContent = token.slice(2, -2);
       parent.appendChild(strong);
-    } else if (token.startsWith("*")) {
+    } else {
       const em = document.createElement("em");
       em.textContent = token.slice(1, -1);
       parent.appendChild(em);
     }
 
-    index = tokenRegex.lastIndex;
+    index = regex.lastIndex;
   }
 
   if (index < text.length) {
