@@ -1,105 +1,112 @@
 <div align="center">
 
-<img src="assets/picklo-logo.svg" alt="Picklo" width="540">
+<img src="assets/picklo-logo.svg" alt="Picklo" width="520">
 
-<br>
+### A general AI assistant that now feels like a real conversation.
 
-### Your AI, your way.
-
-A browser-based, local-first general AI assistant for **thinking, writing, coding, planning, brainstorming and document analysis**.
-
-<br>
-
-<img src="https://img.shields.io/badge/Version-3.0.0-6C5CE7?style=for-the-badge" alt="Version 3.0.0">
-<img src="https://img.shields.io/badge/Runtime-WebGPU-17224A?style=for-the-badge" alt="WebGPU">
+<img src="https://img.shields.io/badge/Release-V4.0.0-6C5CE7?style=for-the-badge" alt="V4">
+<img src="https://img.shields.io/badge/UX-Chat_First-17224A?style=for-the-badge" alt="Chat first">
 <img src="https://img.shields.io/badge/Engine-WebLLM-5367E8?style=for-the-badge" alt="WebLLM">
-<img src="https://img.shields.io/badge/Backend-None-4EBC83?style=for-the-badge" alt="No backend">
-<img src="https://img.shields.io/badge/API_Key-Not_Required-D79D45?style=for-the-badge" alt="No API key">
+<img src="https://img.shields.io/badge/Inference-WebGPU-42A875?style=for-the-badge" alt="WebGPU">
+<img src="https://img.shields.io/badge/Backend-None-D79D45?style=for-the-badge" alt="No backend">
+
+<br><br>
+
+<img src="assets/picklo-v4-preview.png" alt="Picklo V4 interface" width="100%">
 
 </div>
 
 ---
 
-## Picklo V3
+# Picklo V4
 
-Picklo V3 is the biggest product change so far.
+**V4 is the conversation release.**
 
-V1 proved that a real language model could run in the browser. V2 added persistent conversations, memory, model switching and local backups. **V3 turns Picklo into a product that feels like a personal assistant rather than an AI engineering demo.**
+V3 established Picklo's identity, response modes, persistent memory and local document retrieval. V4 keeps those capabilities but reorganizes the entire product around one action:
 
-Picklo remains a general AI application powered by open language models. It is **not** a foundation model trained from scratch.
+> **Talk to Picklo.**
 
-<div align="center">
+The interface is intentionally closer to a real messaging system and further away from an AI control panel.
 
-<img src="assets/picklo-v3-preview.png" alt="Picklo V3 interface" width="100%">
+## V4 UX redesign
 
-</div>
+```text
+┌───────────────────┬──────────────────────────────────────────┐
+│ Picklo            │ Picklo / Current chat            General │
+│ + New chat        ├──────────────────────────────────────────┤
+│ Search chats      │                                          │
+│                   │   Picklo message                         │
+│ Recent chats      │                           User message   │
+│                   │   Picklo message                         │
+│                   │                                          │
+│ Files             ├──────────────────────────────────────────┤
+│ Memory            │ Attach   Message Picklo…          Send   │
+│ Settings          │                                          │
+└───────────────────┴──────────────────────────────────────────┘
+```
 
-## What Picklo can do
+### What changed
 
-<table>
-<tr>
-<td width="50%">
+- **Two-pane desktop layout** instead of a dashboard-style three-column layout.
+- **Full-screen mobile chat** with conversations behind a drawer.
+- **Conversation search** across titles and recent messages.
+- **Conversation previews** with recent text and timestamps.
+- **Real chat rhythm** with Picklo on the left and the user on the right.
+- **Purple user bubbles** for instant message ownership recognition.
+- **Human-sized message widths** instead of large content cards.
+- **Compact chat header** with active conversation, mode and runtime state.
+- **Sticky bottom composer** with attachment and send controls.
+- **Quick follow-up chips** for common conversational actions.
+- **Tools moved into sheets** so files, memory and model controls do not compete with the chat.
+- **Less visible infrastructure** while retaining the same local-first engine.
 
-### Ask & Think
+## Core features retained
 
-Use Picklo for explanations, questions, brainstorming, decisions and general problem solving.
+### General-purpose AI
 
-</td>
-<td width="50%">
+Picklo can be used for:
 
-### Write
+- general questions;
+- explanations;
+- brainstorming;
+- planning;
+- writing and rewriting;
+- coding and debugging;
+- document analysis;
+- structured reasoning;
+- decision support.
 
-Draft, rewrite, structure and refine content with a dedicated writing mode.
+### Four response modes
 
-</td>
-</tr>
-<tr>
-<td width="50%">
+- **General**
+- **Write**
+- **Code**
+- **Analyze**
 
-### Code
+Modes change emphasis, not what users are allowed to ask.
 
-Build, explain and debug code while keeping the full conversation available.
+### Persistent conversations
 
-</td>
-<td width="50%">
+Chats remain stored locally in the browser.
 
-### Analyze
+V4 adds:
 
-Attach local documents and let Picklo retrieve relevant passages before answering.
+- conversation search;
+- latest-message previews;
+- relative timestamps;
+- improved conversation hierarchy.
 
-</td>
-</tr>
-</table>
+### Persistent memory
 
-## V3 highlights
+Use the Memory sheet or say:
 
-- **New Picklo identity** — original mascot mark and wordmark included in the application and repository.
-- **Human-first chat interface** — conversational bubbles, compact assistant identity, quick follow-ups and a mobile-app feel.
-- **Four response modes** — General, Write, Code and Analyze.
-- **Persistent conversations** — multiple saved chats with automatic local titles.
-- **Persistent memory** — save user preferences or context and reuse them when relevant.
-- **Local file context** — PDF plus common text and source-code formats.
-- **Local retrieval** — Picklo selects relevant chunks from saved files before generation.
-- **Runtime-aware model selection** — only models reported by WebLLM are shown.
-- **Streaming output** — responses appear while the model generates.
-- **Stop generation** — interrupt a response without reloading the application.
-- **Markdown and code blocks** — including one-click code copy.
-- **Backup and restore** — export chats, memory, preferences and local file text to JSON.
-- **V2 state migration** — existing Picklo V2 local conversations and memory are imported automatically when possible.
-- **PWA shell** — installable app structure and local frontend cache.
-- **No application backend** — the core deployment remains static.
+```text
+remember that I prefer concise answers
+```
 
-## Interface philosophy
+### Local file context
 
-Picklo V3 deliberately avoids the appearance of an AI control panel.
-
-The model is still configurable, but it is pushed into **Settings**. The primary interface is the conversation itself. On desktop, conversations live to the left and contextual controls live to the right. On mobile, the same functionality is condensed into an app-style bottom navigation.
-
-The result is intentionally closer to a finished consumer assistant than a model playground.
-
-## Local file analysis
-
-Picklo can read text from:
+Picklo can extract text from:
 
 ```text
 PDF
@@ -117,79 +124,65 @@ XML
 YAML
 ```
 
-When a question is sent, V3 performs a lightweight local retrieval pass:
+### Local retrieval
 
 ```text
 Question
-   │
-   ▼
-Token extraction
-   │
-   ▼
+   ↓
+Extract important terms
+   ↓
 Search local document chunks
-   │
-   ▼
-Rank matching chunks
-   │
-   ▼
-Add relevant passages to model context
-   │
-   ▼
+   ↓
+Rank matching passages
+   ↓
+Add selected context
+   ↓
 Generate response locally
 ```
 
-This is intentionally lightweight. V3 does **not** require a vector database, cloud storage or embeddings server.
+### Local model runtime
 
-> Image-only scanned PDFs are not OCR'd in V3.
+Picklo uses WebLLM + WebGPU for in-browser language-model inference.
 
-## Architecture
+## V3 → V4 migration
+
+When no V4 state exists, Picklo checks for `picklo-v3-state` and migrates supported V3 browser data.
+
+That includes:
+
+- conversations;
+- persistent memory;
+- model preference;
+- response-mode preference.
+
+The local document database remains compatible with the V3 file store.
+
+## Privacy architecture
 
 ```text
-┌────────────────────────────────────────────┐
-│                 Picklo UI                  │
-│  Chats · Modes · Memory · Files · Backup  │
-└──────────────────────┬─────────────────────┘
-                       │
-          ┌────────────┴────────────┐
-          │                         │
-          ▼                         ▼
-┌───────────────────┐     ┌────────────────────┐
-│ Browser storage   │     │ Local file context │
-│                   │     │                    │
-│ localStorage      │     │ IndexedDB          │
-│ - chats           │     │ - extracted text   │
-│ - memory          │     │ - local retrieval  │
-│ - preferences     │     └──────────┬─────────┘
-└──────────┬────────┘                │
-           └─────────────┬───────────┘
-                         ▼
-                ┌──────────────────┐
-                │      WebLLM      │
-                │ Streaming chat   │
-                └────────┬─────────┘
-                         ▼
-                ┌──────────────────┐
-                │      WebGPU      │
-                │ Local inference  │
-                └──────────────────┘
+Browser
+├── localStorage
+│   ├── chats
+│   ├── memory
+│   └── preferences
+│
+├── IndexedDB
+│   └── local document text
+│
+└── WebGPU
+    └── language-model inference
 ```
 
-## Privacy model
-
-Picklo V3 is **local-first**, not magically offline.
-
-The Picklo application stores conversations, memory and extracted local-file text in the browser. Language-model inference runs through WebLLM/WebGPU on the user's device after the model assets are obtained. The first model load therefore still requires the model files to be downloaded.
-
-There is no custom Picklo account server, application database or OpenAI API key in V3.
+Picklo V4 still requires no custom Picklo backend, cloud database, OpenAI API key or Picklo account.
 
 ## Project structure
 
 ```text
-picklo-v3/
+picklo-v4/
 ├── assets/
 │   ├── picklo-logo.svg
 │   ├── picklo-mark.svg
-│   └── picklo-v3-preview.png
+│   └── picklo-v4-preview.png
 ├── index.html
 ├── styles.css
 ├── app.js
@@ -198,102 +191,41 @@ picklo-v3/
 └── README.md
 ```
 
-## Run Picklo
+## GitHub Pages
 
-### Option 1 — GitHub Pages
-
-1. Upload the project files to your Picklo repository.
-2. Open **Settings → Pages**.
-3. Set the source to **Deploy from a branch**.
-4. Choose `main` and `/ (root)`.
-5. Save.
-6. Open the published site in a WebGPU-capable browser.
-7. Open **Settings** inside Picklo.
-8. Choose a local model and press **Start selected model**.
-
-### Option 2 — Any static server
-
-Picklo is a static web application. Serve the folder over HTTP/HTTPS and open it in a WebGPU-capable browser.
-
-Do not rely on `file://index.html`; browser module and worker restrictions make a real web origin the correct way to run it.
-
-## How memory works
-
-Open **Memory** and save a detail, or tell Picklo:
-
-```text
-remember that I prefer short answers unless I ask for detail
-```
-
-Saved memory is added to future model context when Picklo generates an answer.
-
-## Model support
-
-V3 reads WebLLM's runtime model list and prioritizes several lightweight models when they are available:
-
-- Llama 3.2 1B Instruct
-- SmolLM2 1.7B Instruct
-- Llama 3.2 3B Instruct
-- Phi 3.5 Mini Instruct
-
-The exact available list depends on the WebLLM build loaded by the browser.
+1. Upload the V4 files to your existing Picklo repository.
+2. Commit them to `main`.
+3. Preserve the V3 release/tag.
+4. Deploy `main` from `/ (root)` in **Settings → Pages**.
+5. Open Picklo in a WebGPU-capable browser.
+6. Open **Settings**, choose a model and start it.
 
 ## Evolution
 
 ```text
-Picklo V1
-│
-├─ Local browser inference
-├─ Streaming responses
-└─ Basic conversation
-     │
-     ▼
-Picklo V2
-│
-├─ Saved chats
-├─ Persistent memory
-├─ Model switching
-├─ Markdown / code rendering
-└─ Backup and restore
-     │
-     ▼
-Picklo V3
-│
-├─ New product identity
-├─ General / Write / Code / Analyze modes
-├─ Local document context
-├─ Local retrieval
-├─ Refined consumer chat interface
-├─ V2 migration
-└─ Stronger mobile experience
+V1  Browser LLM proof of concept
+ ↓
+V2  Persistent chats + memory
+ ↓
+V3  Brand + modes + local file retrieval
+ ↓
+V4  Real chat UX + search + cleaner conversation hierarchy
 ```
 
-## V3 boundaries
+## Current boundaries
 
-Picklo V3 does not currently provide:
+V4 does not claim to provide live web search, image generation, image understanding, cloud sync, arbitrary code execution or autonomous browser control.
 
-- live web search;
-- cloud synchronization;
-- image understanding;
-- image generation;
-- autonomous browser control;
-- arbitrary code execution;
-- multi-device accounts.
-
-Those features require additional architecture and should not be represented as available until they are actually implemented.
-
-## Next
-
-V4 is the natural point to introduce a controlled **tool system**: calculator, web retrieval, code execution sandbox and explicit permissions for actions.
+Those require a controlled tool architecture rather than UI-only changes.
 
 ---
 
 <div align="center">
 
-<img src="assets/picklo-mark.svg" alt="Picklo mark" width="80">
+<img src="assets/picklo-mark.svg" alt="Picklo" width="74">
 
-**Picklo V3**
+### Picklo V4
 
-Your AI, your way.
+**The engine stays local. The product now feels conversational.**
 
 </div>

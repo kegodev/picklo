@@ -3,98 +3,121 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <meta name="theme-color" content="#F6F3EE" />
-  <meta name="description" content="Picklo V3 — a local-first general AI assistant for thinking, writing, coding, planning and file analysis." />
-  <title>Picklo V3</title>
+  <meta name="theme-color" content="#fbfaf8" />
+  <meta name="description" content="Picklo V4 — a local-first general AI assistant with a refined chat-first interface." />
+  <title>Picklo V4</title>
   <link rel="icon" href="assets/picklo-mark.svg" type="image/svg+xml" />
   <link rel="manifest" href="manifest.webmanifest" />
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <div class="app-shell">
+  <div class="app">
 
-    <aside class="sidebar desktop-only">
-      <div class="side-top">
+    <aside class="sidebar">
+      <div class="sidebar-header">
         <a class="brand" href="#" aria-label="Picklo home">
           <img src="assets/picklo-mark.svg" alt="" />
-          <div><strong>Picklo</strong><span>Personal AI</span></div>
+          <div>
+            <strong>Picklo</strong>
+            <span>Personal AI</span>
+          </div>
         </a>
 
-        <button class="new-chat" id="newChatBtn" type="button">
-          <span>+</span>
-          New chat
+        <button class="sidebar-new" id="newChatBtn" type="button" aria-label="Start new chat">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
         </button>
-
-        <div class="side-heading">
-          <span>Conversations</span>
-          <button id="clearChatsBtn" type="button">Clear</button>
-        </div>
-
-        <div class="chat-list" id="chatList"></div>
       </div>
 
-      <div class="side-bottom">
-        <button class="side-row" id="memoryBtn" type="button">
-          <span class="side-icon memory-icon">M</span>
-          <span><strong>Memory</strong><small id="memoryCount">0 saved</small></span>
-          <b>›</b>
-        </button>
+      <div class="conversation-search">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4 4"/></svg>
+        <input id="chatSearchInput" type="search" placeholder="Search conversations" autocomplete="off" />
+      </div>
 
-        <button class="side-row" id="filesBtn" type="button">
-          <span class="side-icon files-icon">F</span>
+      <div class="sidebar-label">
+        <span>Recent</span>
+        <button id="clearChatsBtn" type="button">Clear</button>
+      </div>
+
+      <div class="chat-list" id="chatList"></div>
+
+      <div class="sidebar-footer">
+        <button class="sidebar-tool" id="filesBtn" type="button">
+          <span class="tool-icon file-tool">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H10l2 2h5.5A2.5 2.5 0 0 1 20 7.5v9A2.5 2.5 0 0 1 17.5 19h-11A2.5 2.5 0 0 1 4 16.5z"/></svg>
+          </span>
           <span><strong>Files</strong><small id="fileCount">0 local files</small></span>
-          <b>›</b>
         </button>
 
-        <button class="side-row" id="settingsBtn" type="button">
-          <span class="side-icon settings-icon">S</span>
-          <span><strong>Settings</strong><small>Model & preferences</small></span>
-          <b>›</b>
+        <button class="sidebar-tool" id="memoryBtn" type="button">
+          <span class="tool-icon memory-tool">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5a3 3 0 1 1 5.4 1.8A3.4 3.4 0 0 1 18 10a3 3 0 0 1-1.3 2.5A3.5 3.5 0 0 1 13 18H9a3.5 3.5 0 0 1-3.7-5.5A3 3 0 0 1 4 10a3.4 3.4 0 0 1 3.6-3.2A3 3 0 0 1 9 5Z"/><path d="M9 8v7M14 8v7"/></svg>
+          </span>
+          <span><strong>Memory</strong><small id="memoryCount">0 saved</small></span>
         </button>
 
-        <div class="local-state">
+        <button class="sidebar-tool" id="settingsBtn" type="button">
+          <span class="tool-icon settings-tool">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19 12a7.4 7.4 0 0 0-.1-1l2-1.5-2-3.4-2.4 1a7 7 0 0 0-1.8-1L14.4 3h-4.8l-.4 3.1a7 7 0 0 0-1.8 1l-2.4-1-2 3.4L5.1 11a7.4 7.4 0 0 0 0 2L3 14.5l2 3.4 2.4-1a7 7 0 0 0 1.8 1l.4 3.1h4.8l.4-3.1a7 7 0 0 0 1.8-1l2.4 1 2-3.4-2.1-1.5a7.4 7.4 0 0 0 .1-1Z"/></svg>
+          </span>
+          <span><strong>Settings</strong><small id="sidebarModelText">Local model</small></span>
+        </button>
+
+        <div class="runtime">
           <span class="state-dot" id="stateDot"></span>
           <div>
             <strong id="stateTitle">Picklo is offline</strong>
-            <small id="stateDetail">Start a local model when ready</small>
+            <small id="stateDetail">Start a model when you are ready</small>
           </div>
         </div>
       </div>
     </aside>
 
-    <main class="chat-app">
-      <header class="assistant-header">
-        <button class="mobile-menu mobile-only" id="mobileMenuBtn" type="button" aria-label="Open conversations">
-          <span></span><span></span><span></span>
-        </button>
+    <main class="chat-shell">
+      <header class="chat-header">
+        <div class="header-left">
+          <button class="mobile-menu" id="mobileMenuBtn" type="button" aria-label="Open conversations">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 7h14M5 12h14M5 17h14"/></svg>
+          </button>
 
-        <div class="assistant-identity">
           <div class="avatar">
             <img src="assets/picklo-mark.svg" alt="Picklo" />
             <span class="presence" id="presence"></span>
           </div>
-          <div class="identity-copy">
-            <div class="identity-title">
-              <h1>Picklo</h1>
-              <span>V3</span>
+
+          <div class="chat-heading">
+            <div class="chat-title-line">
+              <h1 id="headerChatTitle">New chat</h1>
+              <span class="version">V4</span>
             </div>
-            <p id="assistantSubtitle">Your general-purpose personal AI</p>
-            <div class="identity-status">
-              <span id="modelStatus">Local model not started</span>
+            <div class="chat-status">
+              <span id="assistantSubtitle">Your general-purpose personal AI</span>
               <i>•</i>
-              <b>Private</b>
+              <strong id="modelStatus">Local model not started</strong>
             </div>
           </div>
         </div>
 
-        <div class="header-actions">
-          <button class="mode-button" id="modeButton" type="button">General</button>
-          <button class="start-button" id="startButton" type="button">Start Picklo</button>
+        <div class="header-right">
+          <button class="mode-pill" id="modeButton" type="button">
+            <span id="activeModeLabel">General</span>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m8 10 4 4 4-4"/></svg>
+          </button>
+
+          <button class="header-new" id="headerNewChatBtn" type="button" aria-label="New chat">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+          </button>
+
+          <button class="header-more" id="startButton" type="button" aria-label="Picklo settings">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg>
+          </button>
         </div>
       </header>
 
       <div class="loading-strip hidden" id="progressWrap">
-        <div><span id="progressText">Preparing Picklo…</span><strong id="progressPercent">0%</strong></div>
+        <div class="loading-copy">
+          <span id="progressText">Preparing Picklo…</span>
+          <strong id="progressPercent">0%</strong>
+        </div>
         <div class="progress-track"><div class="progress-bar" id="progressBar"></div></div>
       </div>
 
@@ -102,22 +125,24 @@
 
       <div class="context-banner hidden" id="contextBanner">
         <div>
-          <span class="context-mark">F</span>
+          <span class="context-icon">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v5h5"/></svg>
+          </span>
           <span id="contextText">Using local files</span>
         </div>
-        <button id="clearContextBtn" type="button">Clear</button>
+        <button id="clearContextBtn" type="button">Remove</button>
       </div>
 
       <form class="composer" id="chatForm">
         <div class="quick-actions" id="quickActions">
           <button type="button" data-followup="Explain that more simply and keep only the essential points.">Simplify</button>
-          <button type="button" data-followup="Give me a concrete example of what you just explained.">Give an example</button>
+          <button type="button" data-followup="Give me a concrete example of what you just explained.">Example</button>
           <button type="button" data-followup="Go deeper. Explain the important details and tradeoffs I should understand.">Go deeper</button>
-          <button type="button" data-followup="Turn that into a clear step-by-step action plan.">Make it steps</button>
+          <button type="button" data-followup="Turn that into a clear step-by-step action plan.">Make steps</button>
         </div>
 
         <div class="composer-box">
-          <label class="attach" for="fileInput" title="Add local files">
+          <label class="attach" for="fileInput" title="Attach local files">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 12 6.6-6.6a3 3 0 1 1 4.2 4.2l-9.2 9.2a5 5 0 0 1-7.1-7.1l9-9"/></svg>
             <input id="fileInput" type="file" multiple hidden accept=".pdf,.txt,.md,.markdown,.csv,.json,.html,.css,.js,.ts,.jsx,.tsx,.py,.xml,.yaml,.yml,text/*,application/json,application/pdf" />
           </label>
@@ -126,75 +151,27 @@
 
           <button class="stop-button hidden" id="stopBtn" type="button">Stop</button>
 
-          <button class="send-button" id="sendBtn" type="submit" disabled aria-label="Send">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 12 6-6 6 6M12 6v12"/></svg>
+          <button class="send-button" id="sendBtn" type="submit" disabled aria-label="Send message">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M6.5 10.5 12 5l5.5 5.5"/></svg>
           </button>
         </div>
 
-        <div class="composer-note">
+        <div class="composer-footer">
           <span id="composerNote">Chats, memory and files stay in this browser.</span>
-          <span>Shift + Enter for a new line</span>
+          <span>Picklo can make mistakes. Check important information.</span>
         </div>
       </form>
-
-      <nav class="mobile-nav mobile-only" aria-label="Picklo navigation">
-        <button class="active" type="button" data-mobile-action="chat">
-          <span class="nav-glyph">C</span><span>Chat</span>
-        </button>
-        <button type="button" data-mobile-action="files">
-          <span class="nav-glyph">F</span><span>Files</span>
-        </button>
-        <button type="button" data-mobile-action="memory">
-          <span class="nav-glyph">M</span><span>Memory</span>
-        </button>
-        <button type="button" data-mobile-action="settings">
-          <span class="nav-glyph">S</span><span>Settings</span>
-        </button>
-      </nav>
     </main>
+  </div>
 
-    <aside class="context-panel desktop-only">
-      <section class="panel-card welcome-card">
-        <div class="panel-card-head">
-          <div><span class="eyebrow">PICKLO V3</span><h2>One assistant.<br />Many directions.</h2></div>
-          <img src="assets/picklo-mark.svg" alt="" />
-        </div>
-        <p>Ask questions, write, code, plan, analyze documents, brainstorm ideas, or work through decisions.</p>
-      </section>
-
-      <section class="panel-card">
-        <div class="panel-title"><h3>Modes</h3><span id="activeModeLabel">General</span></div>
-        <div class="mode-grid">
-          <button class="active" data-mode="general" type="button"><strong>General</strong><small>Anything</small></button>
-          <button data-mode="write" type="button"><strong>Write</strong><small>Draft & refine</small></button>
-          <button data-mode="code" type="button"><strong>Code</strong><small>Build & debug</small></button>
-          <button data-mode="analyze" type="button"><strong>Analyze</strong><small>Files & reasoning</small></button>
-        </div>
-      </section>
-
-      <section class="panel-card compact">
-        <button class="panel-row" id="panelFilesBtn" type="button">
-          <span class="panel-glyph files-color">F</span>
-          <span><strong>Local files</strong><small id="panelFileCount">0 available</small></span>
-          <b>›</b>
-        </button>
-        <button class="panel-row" id="panelMemoryBtn" type="button">
-          <span class="panel-glyph memory-color">M</span>
-          <span><strong>Memory</strong><small id="panelMemoryCount">0 saved</small></span>
-          <b>›</b>
-        </button>
-        <button class="panel-row" id="panelModelBtn" type="button">
-          <span class="panel-glyph model-color">A</span>
-          <span><strong>Local model</strong><small id="panelModelName">Not started</small></span>
-          <b>›</b>
-        </button>
-      </section>
-
-      <div class="privacy-card">
-        <strong>Local by default</strong>
-        <p>Picklo stores its app data on this device and runs model inference through WebGPU.</p>
-      </div>
-    </aside>
+  <!-- Hidden compatibility targets retained for V3/V4 engine logic. -->
+  <div hidden>
+    <span id="panelFileCount"></span>
+    <span id="panelMemoryCount"></span>
+    <span id="panelModelName"></span>
+    <button id="panelFilesBtn" type="button"></button>
+    <button id="panelMemoryBtn" type="button"></button>
+    <button id="panelModelBtn" type="button"></button>
   </div>
 
   <div class="backdrop hidden" id="backdrop"></div>
@@ -202,25 +179,30 @@
   <section class="sheet hidden" id="settingsSheet" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
     <div class="sheet-handle"></div>
     <header class="sheet-header">
-      <div><span class="eyebrow">PICKLO</span><h2 id="settingsTitle">Settings</h2><p>Choose how Picklo runs on this device.</p></div>
+      <div>
+        <span class="eyebrow">PICKLO</span>
+        <h2 id="settingsTitle">Settings</h2>
+        <p>Model, response mode and local data.</p>
+      </div>
       <button class="sheet-close" data-close-sheet type="button">×</button>
     </header>
     <div class="sheet-body">
-      <label class="field-label" for="modelSelect">Local model</label>
-      <select class="select-field" id="modelSelect"></select>
-      <p class="help-text">Picklo only lists models reported by the WebLLM runtime. Larger models may need substantially more GPU memory.</p>
+      <div class="setting-group">
+        <label class="field-label" for="modelSelect">Local model</label>
+        <select class="select-field" id="modelSelect"></select>
+        <p class="help-text">Only models reported by the current WebLLM runtime are listed.</p>
+        <button class="primary-action" id="loadModelBtn" type="button">Start selected model</button>
+      </div>
 
-      <button class="primary-action" id="loadModelBtn" type="button">Start selected model</button>
-
-      <div class="divider"></div>
-
-      <label class="field-label" for="defaultModeSelect">Default mode</label>
-      <select class="select-field" id="defaultModeSelect">
-        <option value="general">General</option>
-        <option value="write">Write</option>
-        <option value="code">Code</option>
-        <option value="analyze">Analyze</option>
-      </select>
+      <div class="setting-group">
+        <label class="field-label" for="defaultModeSelect">Default response mode</label>
+        <select class="select-field" id="defaultModeSelect">
+          <option value="general">General</option>
+          <option value="write">Write</option>
+          <option value="code">Code</option>
+          <option value="analyze">Analyze</option>
+        </select>
+      </div>
 
       <button class="secondary-action full" id="dataBtn" type="button">Backup & restore Picklo</button>
     </div>
@@ -229,7 +211,11 @@
   <section class="sheet hidden" id="memorySheet" role="dialog" aria-modal="true" aria-labelledby="memoryTitle">
     <div class="sheet-handle"></div>
     <header class="sheet-header">
-      <div><span class="eyebrow">PERSONAL CONTEXT</span><h2 id="memoryTitle">Memory</h2><p>Saved details can be used in future chats when relevant.</p></div>
+      <div>
+        <span class="eyebrow">PERSONAL CONTEXT</span>
+        <h2 id="memoryTitle">Memory</h2>
+        <p>Details Picklo can reuse when they are relevant.</p>
+      </div>
       <button class="sheet-close" data-close-sheet type="button">×</button>
     </header>
     <div class="sheet-body">
@@ -246,54 +232,92 @@
   <section class="sheet hidden" id="filesSheet" role="dialog" aria-modal="true" aria-labelledby="filesTitle">
     <div class="sheet-handle"></div>
     <header class="sheet-header">
-      <div><span class="eyebrow">LOCAL CONTEXT</span><h2 id="filesTitle">Files</h2><p>Picklo can retrieve relevant text from your local documents.</p></div>
+      <div>
+        <span class="eyebrow">LOCAL CONTEXT</span>
+        <h2 id="filesTitle">Files</h2>
+        <p>Attach documents Picklo can search during a conversation.</p>
+      </div>
       <button class="sheet-close" data-close-sheet type="button">×</button>
     </header>
     <div class="sheet-body">
       <label class="primary-action upload-action" for="fileInput">Add files</label>
-      <div class="file-list sheet-file-list" id="sheetFileList"></div>
-      <p class="help-text">Supported: PDF and common text/code files. Scanned image-only PDFs are not OCR'd in V3.</p>
+      <div class="file-list" id="sheetFileList"></div>
+      <p class="help-text">PDF and common text/code formats are supported. Image-only scanned PDFs are not OCR'd in V4.</p>
     </div>
   </section>
 
   <section class="sheet hidden" id="dataSheet" role="dialog" aria-modal="true" aria-labelledby="dataTitle">
     <div class="sheet-handle"></div>
     <header class="sheet-header">
-      <div><span class="eyebrow">YOUR DATA</span><h2 id="dataTitle">Backup & restore</h2><p>Move Picklo's local state between browsers or devices.</p></div>
+      <div>
+        <span class="eyebrow">YOUR DATA</span>
+        <h2 id="dataTitle">Backup & restore</h2>
+        <p>Export or restore Picklo's browser data.</p>
+      </div>
       <button class="sheet-close" data-close-sheet type="button">×</button>
     </header>
     <div class="sheet-body">
       <div class="data-grid">
-        <button id="exportDataBtn" type="button"><strong>Export Picklo</strong><span>Download chats, memory, preferences and local file text.</span></button>
-        <label for="importDataInput"><strong>Import Picklo</strong><span>Restore a Picklo V3 JSON backup.</span><input id="importDataInput" type="file" hidden accept=".json,application/json" /></label>
+        <button id="exportDataBtn" type="button">
+          <strong>Export Picklo</strong>
+          <span>Download chats, memory, preferences and local file text.</span>
+        </button>
+        <label for="importDataInput">
+          <strong>Import Picklo</strong>
+          <span>Restore a Picklo V4 JSON backup.</span>
+          <input id="importDataInput" type="file" hidden accept=".json,application/json" />
+        </label>
       </div>
     </div>
   </section>
 
-  <section class="sheet conversations-sheet hidden" id="conversationsSheet" role="dialog" aria-modal="true" aria-labelledby="conversationTitle">
+  <section class="sheet conversation-sheet hidden" id="conversationsSheet" role="dialog" aria-modal="true" aria-labelledby="conversationTitle">
     <div class="sheet-handle"></div>
     <header class="sheet-header">
-      <div><span class="eyebrow">PICKLO</span><h2 id="conversationTitle">Conversations</h2></div>
+      <div>
+        <span class="eyebrow">PICKLO</span>
+        <h2 id="conversationTitle">Conversations</h2>
+      </div>
       <button class="sheet-close" data-close-sheet type="button">×</button>
     </header>
     <div class="sheet-body">
-      <button class="new-chat mobile-new" id="mobileNewChatBtn" type="button"><span>+</span> New chat</button>
-      <div class="chat-list mobile-chat-list" id="mobileChatList"></div>
+      <button class="mobile-new-chat" id="mobileNewChatBtn" type="button">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+        New chat
+      </button>
+
+      <div class="mobile-chat-list" id="mobileChatList"></div>
+
+      <div class="mobile-tools">
+        <button type="button" data-mobile-action="files">
+          <span>Files</span><small>Local documents</small>
+        </button>
+        <button type="button" data-mobile-action="memory">
+          <span>Memory</span><small>Saved context</small>
+        </button>
+        <button type="button" data-mobile-action="settings">
+          <span>Settings</span><small>Model & data</small>
+        </button>
+      </div>
     </div>
   </section>
 
-  <section class="sheet mode-sheet hidden" id="modeSheet" role="dialog" aria-modal="true" aria-labelledby="modeTitle">
+  <section class="sheet hidden" id="modeSheet" role="dialog" aria-modal="true" aria-labelledby="modeTitle">
     <div class="sheet-handle"></div>
     <header class="sheet-header">
-      <div><span class="eyebrow">RESPONSE MODE</span><h2 id="modeTitle">What are we doing?</h2><p>The mode changes Picklo's emphasis, not what you are allowed to ask.</p></div>
+      <div>
+        <span class="eyebrow">RESPONSE MODE</span>
+        <h2 id="modeTitle">Choose a mode</h2>
+        <p>Modes change Picklo's emphasis without limiting what you can ask.</p>
+      </div>
       <button class="sheet-close" data-close-sheet type="button">×</button>
     </header>
     <div class="sheet-body">
-      <div class="sheet-mode-grid">
-        <button data-sheet-mode="general" type="button"><strong>General</strong><span>Questions, ideas, everyday help and mixed tasks.</span></button>
-        <button data-sheet-mode="write" type="button"><strong>Write</strong><span>Draft, rewrite, structure, polish and develop content.</span></button>
-        <button data-sheet-mode="code" type="button"><strong>Code</strong><span>Build, explain, debug and reason about software.</span></button>
-        <button data-sheet-mode="analyze" type="button"><strong>Analyze</strong><span>Documents, evidence, comparisons and structured reasoning.</span></button>
+      <div class="mode-list">
+        <button data-sheet-mode="general" type="button"><strong>General</strong><span>Questions, planning and everyday help.</span></button>
+        <button data-sheet-mode="write" type="button"><strong>Write</strong><span>Draft, rewrite and refine content.</span></button>
+        <button data-sheet-mode="code" type="button"><strong>Code</strong><span>Build, explain and debug software.</span></button>
+        <button data-sheet-mode="analyze" type="button"><strong>Analyze</strong><span>Documents, evidence and structured reasoning.</span></button>
       </div>
     </div>
   </section>
