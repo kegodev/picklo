@@ -1,8 +1,8 @@
 import * as webllm from "https://esm.run/@mlc-ai/web-llm";
 
-const APP_VERSION = "5.0.0";
-const STORAGE_KEY = "picklo-v5-state";
-const V4_STORAGE_KEY = "picklo-v4-state";
+const APP_VERSION = "6.0.0";
+const STORAGE_KEY = "picklo-v6-state";
+const V5_STORAGE_KEY = "picklo-v5-state";
 const FILE_DB = "picklo-v3-files";
 const FILE_STORE = "documents";
 const MAX_FILE_CHARS = 240000;
@@ -23,7 +23,7 @@ const MODE_PROMPTS = {
 };
 
 const BASE_SYSTEM_PROMPT = `
-You are Picklo V5, a general-purpose personal AI assistant that runs locally in the user's browser.
+You are Picklo V6, a general-purpose personal AI assistant that runs locally in the user's browser.
 You are useful for questions, writing, coding, planning, brainstorming, explanations, decision support and document analysis.
 Do not claim to be ChatGPT or OpenAI. When asked who you are, say you are Picklo.
 
@@ -381,9 +381,9 @@ function loadState() {
     const current = localStorage.getItem(STORAGE_KEY);
     if (current) return normalizeState(JSON.parse(current));
 
-    const v4 = localStorage.getItem(V4_STORAGE_KEY);
-    if (v4) {
-      const migrated = normalizeState(JSON.parse(v4));
+    const v5 = localStorage.getItem(V5_STORAGE_KEY);
+    if (v5) {
+      const migrated = normalizeState(JSON.parse(v5));
       migrated.version = APP_VERSION;
       localStorage.setItem(STORAGE_KEY, JSON.stringify(migrated));
       return migrated;
@@ -1401,7 +1401,7 @@ async function exportData() {
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
-  link.download = `picklo-v5-backup-${new Date().toISOString().slice(0, 10)}.json`;
+  link.download = `picklo-v6-backup-${new Date().toISOString().slice(0, 10)}.json`;
   document.body.appendChild(link);
   link.click();
   link.remove();
@@ -1418,7 +1418,7 @@ async function importData(event) {
     const importedState = parsed.state || parsed;
 
     if (!Array.isArray(importedState.chats) || !Array.isArray(importedState.memories)) {
-      throw new Error("This is not a valid Picklo V5 backup.");
+      throw new Error("This is not a valid Picklo V6 backup.");
     }
 
     if (!confirm("Replace this browser's current Picklo data with the imported backup?")) return;

@@ -1,7 +1,7 @@
 {
-  "name": "Picklo V5",
+  "name": "Picklo V6",
   "short_name": "Picklo",
-  "description": "Picklo V5 \u2014 local-first general AI with tools, memory, files and a chat-first interface.",
+  "description": "Picklo V6 \u2014 larger typography, flat visual design, white light mode and charcoal dark mode.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
