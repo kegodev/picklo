@@ -1,19 +1,46 @@
 import * as webllm from "https://esm.run/@mlc-ai/web-llm";
 
-const APP_VERSION = "6.0.0";
-const STORAGE_KEY = "picklo-v6-state";
-const V5_STORAGE_KEY = "picklo-v5-state";
+const APP_VERSION = "6.1.0";
+const STORAGE_KEY = "picklo-v6.1-state";
+const V6_STORAGE_KEY = "picklo-v6-state";
 const FILE_DB = "picklo-v3-files";
 const FILE_STORE = "documents";
 const MAX_FILE_CHARS = 240000;
-const MAX_CONTEXT_CHARS = 9000;
+const MAX_CONTEXT_CHARS = 7000;
 
 const PREFERRED_MODELS = [
+  { id: "SmolLM2-360M-Instruct-q4f16_1-MLC", label: "SmolLM2 360M", note: "Instant" },
   { id: "Llama-3.2-1B-Instruct-q4f16_1-MLC", label: "Llama 3.2 1B", note: "Fast" },
   { id: "SmolLM2-1.7B-Instruct-q4f16_1-MLC", label: "SmolLM2 1.7B", note: "Balanced" },
-  { id: "Llama-3.2-3B-Instruct-q4f16_1-MLC", label: "Llama 3.2 3B", note: "Stronger" },
-  { id: "Phi-3.5-mini-instruct-q4f16_1-MLC", label: "Phi 3.5 Mini", note: "Heavy" }
+  { id: "Llama-3.2-3B-Instruct-q4f16_1-MLC", label: "Llama 3.2 3B", note: "Quality" }
 ];
+
+const PERFORMANCE_PROFILES = {
+  fast: {
+    label: "Fast",
+    preferredModel: "SmolLM2-360M-Instruct-q4f16_1-MLC",
+    recentMessages: 8,
+    contextChars: 2400,
+    maxTokens: 320,
+    temperature: 0.65
+  },
+  balanced: {
+    label: "Balanced",
+    preferredModel: "Llama-3.2-1B-Instruct-q4f16_1-MLC",
+    recentMessages: 14,
+    contextChars: 4500,
+    maxTokens: 600,
+    temperature: 0.7
+  },
+  quality: {
+    label: "Quality",
+    preferredModel: "SmolLM2-1.7B-Instruct-q4f16_1-MLC",
+    recentMessages: 20,
+    contextChars: 7000,
+    maxTokens: 900,
+    temperature: 0.72
+  }
+};
 
 const MODE_PROMPTS = {
   general: "Be a strong general-purpose assistant. Adapt to the user's task rather than forcing a particular format.",
@@ -23,7 +50,7 @@ const MODE_PROMPTS = {
 };
 
 const BASE_SYSTEM_PROMPT = `
-You are Picklo V6, a general-purpose personal AI assistant that runs locally in the user's browser.
+You are Picklo V6.1, a general-purpose personal AI assistant that runs locally in the user's browser.
 You are useful for questions, writing, coding, planning, brainstorming, explanations, decision support and document analysis.
 Do not claim to be ChatGPT or OpenAI. When asked who you are, say you are Picklo.
 
@@ -45,6 +72,7 @@ const defaultState = () => ({
   activeMode: "general",
   defaultMode: "general",
   theme: "light",
+  performanceProfile: "fast",
   notes: [],
   memories: [],
   chats: []
@@ -57,6 +85,8 @@ let isGenerating = false;
 let generationWasStopped = false;
 let localFiles = [];
 let activeFileSources = [];
+let modelLoadPromise = null;
+let lastGenerationStats = null;
 
 const $ = (id) => document.getElementById(id);
 
@@ -132,6 +162,8 @@ const headerNewChatBtn = $("headerNewChatBtn");
 const sidebarModelText = $("sidebarModelText");
 const themeToggleBtn = $("themeToggleBtn");
 const themeSelect = $("themeSelect");
+const performanceSelect = $("performanceSelect");
+const performanceStatus = $("performanceStatus");
 
 const toolsBtn = $("toolsBtn");
 const composerToolsBtn = $("composerToolsBtn");
@@ -154,11 +186,15 @@ boot();
 async function boot() {
   applyTheme(state.theme || "light", false);
   populateModels();
+  applyPerformanceProfile(state.performanceProfile || "fast", false, false);
   ensureActiveChat();
   localFiles = await listLocalFiles();
   bindEvents();
+
   defaultModeSelect.value = state.defaultMode || "general";
   themeSelect.value = state.theme || "light";
+  performanceSelect.value = state.performanceProfile || "fast";
+
   setMode(state.activeMode || state.defaultMode || "general", false);
   renderAll();
 
@@ -166,6 +202,14 @@ async function boot() {
     window.addEventListener("load", () => {
       navigator.serviceWorker.register("./sw.js").catch(() => {});
     });
+  }
+
+  // Show the interface first, then start the fastest local model automatically.
+  const begin = () => autoStartModel().catch((error) => console.warn("Auto-start failed:", error));
+  if ("requestIdleCallback" in window) {
+    requestIdleCallback(begin, { timeout: 350 });
+  } else {
+    setTimeout(begin, 120);
   }
 }
 
@@ -268,7 +312,12 @@ function bindEvents() {
     applyTheme(themeSelect.value, true);
   });
 
-  loadModelBtn.addEventListener("click", loadSelectedModel);
+  performanceSelect.addEventListener("change", async () => {
+    applyPerformanceProfile(performanceSelect.value, true, true);
+    await loadSelectedModel({ automatic: true });
+  });
+
+  loadModelBtn.addEventListener("click", () => loadSelectedModel({ automatic: false }));
 
   chatForm.addEventListener("submit", async (event) => {
     event.preventDefault();
@@ -381,9 +430,10 @@ function loadState() {
     const current = localStorage.getItem(STORAGE_KEY);
     if (current) return normalizeState(JSON.parse(current));
 
-    const v5 = localStorage.getItem(V5_STORAGE_KEY);
-    if (v5) {
-      const migrated = normalizeState(JSON.parse(v5));
+    const v6 = localStorage.getItem(V6_STORAGE_KEY);
+    if (v6) {
+      const migrated = normalizeState(JSON.parse(v6));
+      if (!migrated.performanceProfile) migrated.performanceProfile = "fast";
       migrated.version = APP_VERSION;
       localStorage.setItem(STORAGE_KEY, JSON.stringify(migrated));
       return migrated;
@@ -398,6 +448,7 @@ function normalizeState(parsed) {
   return {
     ...defaultState(),
     ...parsed,
+    performanceProfile: PERFORMANCE_PROFILES[parsed?.performanceProfile] ? parsed.performanceProfile : "fast",
     notes: Array.isArray(parsed?.notes) ? parsed.notes : [],
     memories: Array.isArray(parsed?.memories) ? parsed.memories : [],
     chats: Array.isArray(parsed?.chats) ? parsed.chats : []
@@ -738,6 +789,51 @@ function renderStats() {
   panelFileCount.textContent = `${localFiles.length} available`;
 }
 
+function getPerformanceProfile() {
+  return PERFORMANCE_PROFILES[state.performanceProfile] || PERFORMANCE_PROFILES.fast;
+}
+
+function applyPerformanceProfile(profileName, persist = true, updateModel = true) {
+  const normalized = PERFORMANCE_PROFILES[profileName] ? profileName : "fast";
+  const profile = PERFORMANCE_PROFILES[normalized];
+
+  state.performanceProfile = normalized;
+  performanceStatus.textContent = profile.label;
+
+  if (performanceSelect) performanceSelect.value = normalized;
+
+  if (updateModel) {
+    const available = [...modelSelect.options].some((option) => option.value === profile.preferredModel);
+    if (available) {
+      state.selectedModel = profile.preferredModel;
+      modelSelect.value = profile.preferredModel;
+    }
+  }
+
+  if (persist) saveState();
+}
+
+async function autoStartModel() {
+  if (engine || modelLoadPromise || isGenerating) return;
+
+  if (!("gpu" in navigator)) {
+    setRuntime("WebGPU unavailable", "Use a WebGPU-capable browser", "error");
+    return;
+  }
+
+  const profile = getPerformanceProfile();
+  const preferredAvailable = [...modelSelect.options].some(
+    (option) => option.value === profile.preferredModel
+  );
+
+  if (preferredAvailable) {
+    state.selectedModel = profile.preferredModel;
+    modelSelect.value = profile.preferredModel;
+  }
+
+  await loadSelectedModel({ automatic: true });
+}
+
 function populateModels() {
   const records = webllm.prebuiltAppConfig?.model_list || [];
   const available = new Set(records.map((record) => record.model_id));
@@ -779,14 +875,20 @@ function friendlyModelName(id) {
     .replaceAll("-", " ");
 }
 
-async function loadSelectedModel() {
-  const selected = modelSelect.value;
+async function loadSelectedModel(options = {}) {
+  const { automatic = false } = options;
+  const selected = modelSelect.value || state.selectedModel;
+
   if (!selected || isGenerating) return;
+  if (loadedModelId === selected && engine) return;
+  if (modelLoadPromise) return modelLoadPromise;
 
   if (!("gpu" in navigator)) {
     setRuntime("WebGPU unavailable", "Use a WebGPU-capable browser", "error");
-    closeSheets();
-    addError("WebGPU is unavailable in this browser. Picklo V4.1 needs a recent WebGPU-capable browser for local inference.");
+    if (!automatic) {
+      closeSheets();
+      addError("WebGPU is unavailable in this browser. Picklo V6.1 needs a WebGPU-capable browser for local inference.");
+    }
     return;
   }
 
@@ -794,8 +896,16 @@ async function loadSelectedModel() {
   progressWrap.classList.remove("hidden");
   progressBar.style.width = "0%";
   progressPercent.textContent = "0%";
-  setRuntime("Starting Picklo", friendlyModelName(selected), "loading");
-  loadModelBtn.textContent = loadedModelId ? "Switching model…" : "Starting model…";
+
+  const profile = getPerformanceProfile();
+  setRuntime(
+    automatic ? "Starting automatically" : "Starting Picklo",
+    `${friendlyModelName(selected)} • ${profile.label}`,
+    "loading"
+  );
+
+  loadModelBtn.textContent = loadedModelId ? "Switching…" : "Loading…";
+  messageInput.placeholder = "Picklo is starting in the background…";
 
   const onProgress = (report) => {
     const text = report?.text || "Preparing Picklo…";
@@ -803,46 +913,70 @@ async function loadSelectedModel() {
       ? Math.round(report.progress * 100)
       : extractPercent(text) ?? 0;
 
-    progressText.textContent = text;
+    progressText.textContent = automatic ? `Starting automatically • ${text}` : text;
     progressPercent.textContent = `${percent}%`;
     progressBar.style.width = `${percent}%`;
   };
 
-  try {
-    if (!engine) {
-      engine = new webllm.MLCEngine({ initProgressCallback: onProgress });
-    } else if (typeof engine.setInitProgressCallback === "function") {
-      engine.setInitProgressCallback(onProgress);
+  modelLoadPromise = (async () => {
+    try {
+      if (!engine) {
+        const worker = new Worker("./webllm-worker.js", { type: "module" });
+        engine = await webllm.CreateWebWorkerMLCEngine(
+          worker,
+          selected,
+          {
+            initProgressCallback: onProgress,
+            appConfig: {
+              ...webllm.prebuiltAppConfig,
+              cacheBackend: "cache"
+            }
+          }
+        );
+      } else {
+        if (typeof engine.setInitProgressCallback === "function") {
+          engine.setInitProgressCallback(onProgress);
+        }
+        await engine.reload(selected);
+      }
+
+      loadedModelId = selected;
+      state.selectedModel = selected;
+      saveState();
+
+      progressBar.style.width = "100%";
+      progressPercent.textContent = "100%";
+      progressText.textContent = "Picklo is ready";
+
+      setRuntime("Picklo is ready", `${friendlyModelName(selected)} • ${profile.label}`, "ready");
+
+      messageInput.disabled = false;
+      sendBtn.disabled = false;
+      messageInput.placeholder = "Message Picklo…";
+      loadModelBtn.textContent = "Model ready";
+
+      setTimeout(() => progressWrap.classList.add("hidden"), 700);
+      if (!automatic) setTimeout(closeSheets, 160);
+      messageInput.focus();
+    } catch (error) {
+      console.error(error);
+      engine = null;
+      loadedModelId = null;
+
+      setRuntime("Picklo could not start", "Try Fast mode or another model", "error");
+      loadModelBtn.textContent = "Try again";
+      messageInput.placeholder = "Picklo could not start";
+
+      if (!automatic) {
+        addError(`The selected model could not start. ${error?.message || String(error)}`);
+      }
+    } finally {
+      loadModelBtn.disabled = false;
+      modelLoadPromise = null;
     }
+  })();
 
-    await engine.reload(selected);
-
-    loadedModelId = selected;
-    state.selectedModel = selected;
-    saveState();
-
-    progressBar.style.width = "100%";
-    progressPercent.textContent = "100%";
-    progressText.textContent = "Picklo is ready";
-    setRuntime("Picklo is ready", friendlyModelName(selected), "ready");
-
-    messageInput.disabled = false;
-    sendBtn.disabled = false;
-    messageInput.placeholder = "Message Picklo…";
-    loadModelBtn.textContent = "Model ready";
-
-    setTimeout(() => progressWrap.classList.add("hidden"), 850);
-    setTimeout(closeSheets, 220);
-    messageInput.focus();
-  } catch (error) {
-    console.error(error);
-    loadedModelId = null;
-    setRuntime("Picklo could not start", "Try another supported model", "error");
-    loadModelBtn.textContent = "Try again";
-    addError(`The selected model could not start. ${error?.message || String(error)}`);
-  } finally {
-    loadModelBtn.disabled = false;
-  }
+  return modelLoadPromise;
 }
 
 function extractPercent(text) {
@@ -896,7 +1030,9 @@ async function sendMessage() {
   const remembered = parseRememberCommand(content);
   if (remembered) addMemory(remembered);
 
-  const retrieved = await retrieveLocalContext(content);
+  const retrieved = shouldUseLocalFiles(content)
+    ? await retrieveLocalContext(content)
+    : [];
   const sourceNames = [...new Set(retrieved.map((item) => item.name))];
   activeFileSources = sourceNames;
 
@@ -914,22 +1050,43 @@ async function sendMessage() {
   assistantBubble.textContent = "";
 
   let fullReply = "";
+  let completionTokens = 0;
+  const generationStartedAt = performance.now();
+  const profile = getPerformanceProfile();
 
   try {
     const stream = await engine.chat.completions.create({
       messages: buildModelMessages(chat, retrieved),
-      temperature: 0.7,
+      temperature: profile.temperature,
       top_p: 0.9,
+      max_tokens: profile.maxTokens,
       stream: true,
       stream_options: { include_usage: true }
     });
 
     for await (const chunk of stream) {
       const delta = chunk.choices?.[0]?.delta?.content || "";
+      if (chunk.usage?.completion_tokens) {
+        completionTokens = chunk.usage.completion_tokens;
+      }
       if (!delta) continue;
       fullReply += delta;
       assistantBubble.textContent = fullReply;
       scrollToBottom();
+    }
+
+    const elapsedSeconds = Math.max((performance.now() - generationStartedAt) / 1000, 0.001);
+    lastGenerationStats = {
+      tokens: completionTokens,
+      seconds: elapsedSeconds,
+      tokensPerSecond: completionTokens ? completionTokens / elapsedSeconds : null
+    };
+
+    if (lastGenerationStats.tokensPerSecond) {
+      performanceStatus.textContent =
+        `${profile.label} • ${lastGenerationStats.tokensPerSecond.toFixed(1)} tok/s`;
+    } else {
+      performanceStatus.textContent = profile.label;
     }
 
     assistantBubble.classList.remove("typing");
@@ -1000,7 +1157,7 @@ function buildModelMessages(chat, retrieved) {
 
   return [
     { role: "system", content: system },
-    ...chat.messages.slice(-24).map((message) => ({
+    ...chat.messages.slice(-getPerformanceProfile().recentMessages).map((message) => ({
       role: message.role,
       content: message.content
     }))
@@ -1258,6 +1415,13 @@ function fileLabel(name) {
   return ext.slice(0, 3);
 }
 
+function shouldUseLocalFiles(text) {
+  if (!localFiles.length) return false;
+  if (state.activeMode === "analyze") return true;
+
+  return /\b(file|files|document|documents|pdf|uploaded|upload|attachment|attached|notes?|read this|according to|in my)\b/i.test(text);
+}
+
 async function retrieveLocalContext(query) {
   if (!localFiles.length) return [];
 
@@ -1292,7 +1456,8 @@ async function retrieveLocalContext(query) {
 
   for (const item of scored) {
     if (chosen.length >= 5) break;
-    if (chars + item.text.length > MAX_CONTEXT_CHARS && chosen.length) continue;
+    const contextLimit = Math.min(MAX_CONTEXT_CHARS, getPerformanceProfile().contextChars);
+    if (chars + item.text.length > contextLimit && chosen.length) continue;
     chosen.push(item);
     chars += item.text.length;
   }
@@ -1401,7 +1566,7 @@ async function exportData() {
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
-  link.download = `picklo-v6-backup-${new Date().toISOString().slice(0, 10)}.json`;
+  link.download = `picklo-v6.1-backup-${new Date().toISOString().slice(0, 10)}.json`;
   document.body.appendChild(link);
   link.click();
   link.remove();
@@ -1418,7 +1583,7 @@ async function importData(event) {
     const importedState = parsed.state || parsed;
 
     if (!Array.isArray(importedState.chats) || !Array.isArray(importedState.memories)) {
-      throw new Error("This is not a valid Picklo V6 backup.");
+      throw new Error("This is not a valid Picklo V6.1 backup.");
     }
 
     if (!confirm("Replace this browser's current Picklo data with the imported backup?")) return;

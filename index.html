@@ -4,8 +4,8 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <meta name="theme-color" content="#fbfaf8" />
-  <meta name="description" content="Picklo V6 — a local-first general AI assistant with a refined chat-first interface." />
-  <title>Picklo V6</title>
+  <meta name="description" content="Picklo V6.1 — a local-first general AI assistant with a refined chat-first interface." />
+  <title>Picklo V6.1</title>
   <link rel="icon" href="assets/picklo-mark.svg" type="image/svg+xml" />
   <link rel="manifest" href="manifest.webmanifest" />
   <link rel="stylesheet" href="styles.css" />
@@ -92,12 +92,14 @@
           <div class="chat-heading">
             <div class="chat-title-line">
               <h1 id="headerChatTitle">New chat</h1>
-              <span class="version">V6</span>
+              <span class="version">V6.1</span>
             </div>
             <div class="chat-status">
               <span id="assistantSubtitle">Your general-purpose personal AI</span>
               <i>•</i>
-              <strong id="modelStatus">Local model not started</strong>
+              <strong id="modelStatus">Starting automatically…</strong>
+              <i>•</i>
+              <b id="performanceStatus">Fast</b>
             </div>
           </div>
         </div>
@@ -207,10 +209,20 @@
     </header>
     <div class="sheet-body">
       <div class="setting-group">
+        <label class="field-label" for="performanceSelect">Performance</label>
+        <select class="select-field" id="performanceSelect">
+          <option value="fast">Fast — quickest replies</option>
+          <option value="balanced">Balanced — better quality</option>
+          <option value="quality">Quality — strongest local mode</option>
+        </select>
+        <p class="help-text">Fast uses the smallest compatible model and shorter context. Picklo starts it automatically in the background.</p>
+      </div>
+
+      <div class="setting-group">
         <label class="field-label" for="modelSelect">Local model</label>
         <select class="select-field" id="modelSelect"></select>
-        <p class="help-text">Only models reported by the current WebLLM runtime are listed.</p>
-        <button class="primary-action" id="loadModelBtn" type="button">Start selected model</button>
+        <p class="help-text">Advanced override. Changing the model manually can make responses slower.</p>
+        <button class="primary-action" id="loadModelBtn" type="button">Switch model now</button>
       </div>
 
       <div class="setting-group">

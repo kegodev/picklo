@@ -1328,3 +1328,19 @@ html[data-theme="light"] * {
     font-size: 12px !important;
   }
 }
+
+
+/* Picklo V6.1 — performance indicators */
+#performanceStatus {
+  color: var(--purple);
+  font-weight: 700;
+}
+
+html[data-theme="dark"] #performanceStatus {
+  color: #b5adff;
+}
+
+.performance-note {
+  font-size: 12px;
+  color: var(--muted);
+}

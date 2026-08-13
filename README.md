@@ -2,151 +2,154 @@
 
 <img src="assets/picklo-logo.svg" alt="Picklo" width="520">
 
-# Picklo V6
+# Picklo V6.1
 
-### Readability first.
+### Performance Update
 
-<img src="https://img.shields.io/badge/Release-V6.0.0-5F56C9?style=for-the-badge" alt="V6">
-<img src="https://img.shields.io/badge/Light-White-FFFFFF?style=for-the-badge" alt="White light mode">
-<img src="https://img.shields.io/badge/Dark-Charcoal-171717?style=for-the-badge" alt="Charcoal dark mode">
-<img src="https://img.shields.io/badge/Visuals-Flat-202020?style=for-the-badge" alt="Flat visuals">
+<img src="https://img.shields.io/badge/Release-V6.1.0-5F56C9?style=for-the-badge" alt="V6.1">
+<img src="https://img.shields.io/badge/Startup-Automatic-2F8A5C?style=for-the-badge" alt="Automatic startup">
+<img src="https://img.shields.io/badge/Inference-Web_Worker-202020?style=for-the-badge" alt="Web Worker">
+<img src="https://img.shields.io/badge/Fast_Model-SmolLM2_360M-5367E8?style=for-the-badge" alt="Fast model">
 
 </div>
 
 ---
 
-## V6 design direction
+## What changed
 
-Picklo V6 is a visual readability release.
+Picklo V6.1 is focused on one thing: **making local AI feel faster**.
 
-The goal is straightforward:
+### Automatic model startup
 
-> Make every important part of Picklo easier to read and remove visual effects that compete with the conversation.
+The user no longer has to open Settings and manually start a model.
 
-## New typography
-
-V6 switches the primary interface font to:
+Picklo now:
 
 ```text
-Segoe UI Variable
-Segoe UI
-Arial
-Helvetica
-sans-serif
+Page opens
+   ↓
+Interface renders immediately
+   ↓
+Fast local model starts automatically in background
+   ↓
+Model is cached by the browser
+   ↓
+Composer becomes ready
 ```
 
-Text sizes are increased throughout the application, including:
+The default Fast profile uses **SmolLM2 360M q4f16** when the current WebLLM runtime exposes it.
 
-- conversation titles;
-- message text;
-- timestamps;
-- sidebar labels;
-- search;
-- buttons;
-- settings;
-- memory;
-- file names;
-- tools;
-- code blocks;
-- mobile UI.
+### Important first-run behavior
 
-## Light mode
+A browser-local model still has to be downloaded at least once. V6.1 cannot remove that network transfer, but it reduces the first-run cost by choosing a much smaller model and starts the download automatically instead of making the user initiate it manually.
 
-Light mode is now intentionally neutral and white.
+After caching, later starts should reuse the browser cache.
+
+## Performance profiles
+
+### Fast
 
 ```text
-Background       #FFFFFF
-Sidebar          #FFFFFF
-Chat surface     #FFFFFF
-Cards            #FFFFFF
-Secondary fill   #F6F6F6
-Text             #1F1F1F
-Borders          #DDDDDD
+Model preference   SmolLM2 360M
+Recent messages    8
+File context       ~2,400 characters
+Max response       320 tokens
 ```
 
-There is no beige, brown or cream background in the main interface.
+Designed for immediate everyday chat.
 
-## Dark mode
-
-Dark mode now uses charcoal rather than pure black.
+### Balanced
 
 ```text
-Background       #171717
-Sidebar          #1B1B1B
-Surface          #222222
-Message bubble   #242424
-Text             #FFFFFF
-Muted text       #BCBCBC
-Border           #343434
+Model preference   Llama 3.2 1B
+Recent messages    14
+File context       ~4,500 characters
+Max response       600 tokens
 ```
 
-The goal is high contrast without turning the UI into a glowing/neon interface.
+Better answer quality while staying reasonably responsive.
 
-## Flat visual system
+### Quality
 
-V6 removes or suppresses:
+```text
+Model preference   SmolLM2 1.7B
+Recent messages    20
+File context       ~7,000 characters
+Max response       900 tokens
+```
 
-- neon-like glows;
-- gradient effects;
-- glossy visual treatments;
-- unnecessary box shadows;
-- glowing buttons;
-- glowing avatars;
-- text shadows.
+For tasks where response quality matters more than speed.
 
-Purple remains part of the Picklo identity, but it is used as a flat accent rather than an effect.
+## Web Worker inference
 
-## Existing V5 capabilities remain
+V6.1 moves WebLLM inference into:
 
-Picklo V6 retains:
+```text
+webllm-worker.js
+```
 
-- persistent conversations;
-- conversation search;
-- persistent memory;
-- local file context;
-- PDF/text retrieval;
-- General / Write / Code / Analyze modes;
-- white/dark appearance switching;
-- Calculator;
-- JavaScript sandbox;
-- Quick Notes;
-- local time utility;
-- local file-search shortcut;
-- Copy message action;
-- Regenerate response action;
-- fixed header;
-- fixed composer;
-- scrollable message history;
-- WebLLM/WebGPU local inference.
+The worker performs the heavy model work away from the main UI thread.
 
-## V5 → V6 migration
+This reduces competition between inference and:
 
-If no V6 browser state exists, Picklo checks for V5 local state and migrates supported data.
+- typing;
+- scrolling;
+- streaming updates;
+- opening sheets;
+- other Picklo interface interactions.
 
-That includes:
+## Smarter document retrieval
 
-- chats;
+V6 searched local files on every message.
+
+V6.1 only retrieves local documents when:
+
+- Analyze mode is active; or
+- the message refers to files, PDFs, uploads, attachments or documents.
+
+Normal chat therefore avoids unnecessary retrieval work.
+
+## Shorter prompt processing
+
+Prompt history is now determined by the selected performance profile rather than always sending a large fixed history.
+
+This reduces the amount of conversation text the model must process before it can begin answering.
+
+## Generation speed display
+
+When WebLLM reports completion-token usage, Picklo displays an approximate:
+
+```text
+12.4 tok/s
+```
+
+next to the selected performance mode.
+
+## Existing capabilities retained
+
+V6.1 keeps:
+
+- white light mode;
+- charcoal dark mode;
+- larger typography;
+- flat non-neon UI;
+- persistent chats;
 - memory;
 - notes;
-- theme;
-- selected model;
-- response-mode preferences.
+- local files;
+- file retrieval;
+- Calculator;
+- JavaScript sandbox;
+- General / Write / Code / Analyze modes;
+- Copy / Regenerate;
+- fixed header and composer;
+- streaming responses.
 
-## Evolution
+## V6 → V6.1 migration
 
-```text
-V1  Local browser AI
- ↓
-V2  Chats + memory
- ↓
-V3  Brand + file retrieval
- ↓
-V4  Chat-first UX
- ↓
-V5  Local tools
- ↓
-V6  Readability + flat visual system
-```
+When no V6.1 state exists, Picklo imports the existing V6 state.
+
+Chats, memory, notes, theme, selected model and preferences remain available.
 
 ---
 
@@ -154,8 +157,8 @@ V6  Readability + flat visual system
 
 <img src="assets/picklo-mark.svg" alt="Picklo" width="76">
 
-### Picklo V6
+### Picklo V6.1
 
-**Clearer text. Cleaner surfaces. Less visual noise.**
+**Open Picklo. The AI starts itself.**
 
 </div>
