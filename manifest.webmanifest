@@ -1,7 +1,7 @@
 {
-  "name": "Picklo V4.2.2",
+  "name": "Picklo V5",
   "short_name": "Picklo",
-  "description": "Picklo V4.2.2 \u2014 a local-first general AI assistant with white light mode and true black dark mode.",
+  "description": "Picklo V5 \u2014 local-first general AI with tools, memory, files and a chat-first interface.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

@@ -1,8 +1,8 @@
 import * as webllm from "https://esm.run/@mlc-ai/web-llm";
 
-const APP_VERSION = "4.2.2";
-const STORAGE_KEY = "picklo-v4-state";
-const V3_STORAGE_KEY = "picklo-v3-state";
+const APP_VERSION = "5.0.0";
+const STORAGE_KEY = "picklo-v5-state";
+const V4_STORAGE_KEY = "picklo-v4-state";
 const FILE_DB = "picklo-v3-files";
 const FILE_STORE = "documents";
 const MAX_FILE_CHARS = 240000;
@@ -23,7 +23,7 @@ const MODE_PROMPTS = {
 };
 
 const BASE_SYSTEM_PROMPT = `
-You are Picklo V4.2.2, a general-purpose personal AI assistant that runs locally in the user's browser.
+You are Picklo V5, a general-purpose personal AI assistant that runs locally in the user's browser.
 You are useful for questions, writing, coding, planning, brainstorming, explanations, decision support and document analysis.
 Do not claim to be ChatGPT or OpenAI. When asked who you are, say you are Picklo.
 
@@ -45,6 +45,7 @@ const defaultState = () => ({
   activeMode: "general",
   defaultMode: "general",
   theme: "light",
+  notes: [],
   memories: [],
   chats: []
 });
@@ -132,6 +133,22 @@ const sidebarModelText = $("sidebarModelText");
 const themeToggleBtn = $("themeToggleBtn");
 const themeSelect = $("themeSelect");
 
+const toolsBtn = $("toolsBtn");
+const composerToolsBtn = $("composerToolsBtn");
+const toolsSheet = $("toolsSheet");
+const calculatorInput = $("calculatorInput");
+const calculatorRunBtn = $("calculatorRunBtn");
+const calculatorResult = $("calculatorResult");
+const codeRunnerInput = $("codeRunnerInput");
+const codeRunBtn = $("codeRunBtn");
+const codeOutput = $("codeOutput");
+const noteInput = $("noteInput");
+const saveNoteBtn = $("saveNoteBtn");
+const notesList = $("notesList");
+const localTimeBtn = $("localTimeBtn");
+const searchFilesToolBtn = $("searchFilesToolBtn");
+const localToolOutput = $("localToolOutput");
+
 boot();
 
 async function boot() {
@@ -175,6 +192,16 @@ function bindEvents() {
   panelModelBtn.addEventListener("click", () => openSheet(settingsSheet));
   startButton.addEventListener("click", () => openSheet(settingsSheet));
 
+  toolsBtn.addEventListener("click", () => { renderNotes(); openSheet(toolsSheet); });
+  composerToolsBtn.addEventListener("click", () => { renderNotes(); openSheet(toolsSheet); });
+  document.querySelectorAll("[data-tool-tab]").forEach((button) => button.addEventListener("click", () => switchToolTab(button.dataset.toolTab)));
+  calculatorRunBtn.addEventListener("click", runCalculator);
+  calculatorInput.addEventListener("keydown", (event) => { if (event.key === "Enter") runCalculator(); });
+  codeRunBtn.addEventListener("click", runSandboxedCode);
+  saveNoteBtn.addEventListener("click", saveQuickNote);
+  localTimeBtn.addEventListener("click", showLocalTime);
+  searchFilesToolBtn.addEventListener("click", useFileSearchTool);
+
   filesBtn.addEventListener("click", () => openSheet(filesSheet));
   panelFilesBtn.addEventListener("click", () => openSheet(filesSheet));
 
@@ -198,6 +225,7 @@ function bindEvents() {
   document.querySelectorAll("[data-mobile-action]").forEach((button) => {
     button.addEventListener("click", () => {
       const action = button.dataset.mobileAction;
+      if (action === "tools") { renderNotes(); openSheet(toolsSheet); }
       if (action === "files") openSheet(filesSheet);
       if (action === "memory") {
         renderMemory();
@@ -353,9 +381,9 @@ function loadState() {
     const current = localStorage.getItem(STORAGE_KEY);
     if (current) return normalizeState(JSON.parse(current));
 
-    const v3 = localStorage.getItem(V3_STORAGE_KEY);
-    if (v3) {
-      const migrated = normalizeState(JSON.parse(v3));
+    const v4 = localStorage.getItem(V4_STORAGE_KEY);
+    if (v4) {
+      const migrated = normalizeState(JSON.parse(v4));
       migrated.version = APP_VERSION;
       localStorage.setItem(STORAGE_KEY, JSON.stringify(migrated));
       return migrated;
@@ -370,6 +398,7 @@ function normalizeState(parsed) {
   return {
     ...defaultState(),
     ...parsed,
+    notes: Array.isArray(parsed?.notes) ? parsed.notes : [],
     memories: Array.isArray(parsed?.memories) ? parsed.memories : [],
     chats: Array.isArray(parsed?.chats) ? parsed.chats : []
   };
@@ -667,6 +696,28 @@ function appendMessageToDOM(role, content, options = {}) {
   bubble.appendChild(time);
 
   wrap.appendChild(bubble);
+
+  const actions = document.createElement("div");
+  actions.className = "message-actions";
+  const copyAction = document.createElement("button");
+  copyAction.type = "button";
+  copyAction.className = "message-action";
+  copyAction.textContent = "Copy";
+  copyAction.addEventListener("click", async () => {
+    try { await navigator.clipboard.writeText(content); copyAction.textContent = "Copied"; }
+    catch { copyAction.textContent = "Unavailable"; }
+    setTimeout(() => (copyAction.textContent = "Copy"), 1000);
+  });
+  actions.appendChild(copyAction);
+  if (role === "assistant") {
+    const regenerateAction = document.createElement("button");
+    regenerateAction.type = "button";
+    regenerateAction.className = "message-action";
+    regenerateAction.textContent = "Regenerate";
+    regenerateAction.addEventListener("click", regenerateLastAssistant);
+    actions.appendChild(regenerateAction);
+  }
+  wrap.appendChild(actions);
   row.appendChild(wrap);
   messages.appendChild(row);
 
@@ -1287,6 +1338,55 @@ function renderContext() {
   contextBanner.classList.remove("hidden");
 }
 
+function switchToolTab(tab) {
+  document.querySelectorAll("[data-tool-tab]").forEach((button) => button.classList.toggle("active", button.dataset.toolTab === tab));
+  document.querySelectorAll("[data-tool-panel]").forEach((panel) => panel.classList.toggle("hidden", panel.dataset.toolPanel !== tab));
+}
+
+function runCalculator() {
+  const expression = calculatorInput.value.trim();
+  const output = calculatorResult.querySelector("strong");
+  if (!expression) { output.textContent = "Enter an expression"; return; }
+  try { const value = evaluateMathExpression(expression); output.textContent = Number.isFinite(value) ? String(Number(value.toPrecision(12))) : String(value); }
+  catch (error) { output.textContent = error?.message || "Invalid expression"; }
+}
+
+function evaluateMathExpression(source) {
+  const tokens = tokenizeMath(source); let i = 0;
+  const peek = () => tokens[i];
+  const take = (v) => { if (v !== undefined && peek()?.value !== v) throw new Error(`Expected "${v}"`); return tokens[i++]; };
+  const expr = () => { let v = term(); while (peek() && ["+","-"].includes(peek().value)) { const op=take().value, r=term(); v=op==="+"?v+r:v-r; } return v; };
+  const term = () => { let v = power(); while (peek() && ["*","/","%"].includes(peek().value)) { const op=take().value, r=power(); if(op==="*")v*=r; if(op==="/")v/=r; if(op==="%")v%=r; } return v; };
+  const power = () => { let v=unary(); if(peek()?.value==="^"){take("^"); v=Math.pow(v,power());} return v; };
+  const unary = () => { if(peek()?.value==="+"){take("+");return unary();} if(peek()?.value==="-"){take("-");return -unary();} return primary(); };
+  const primary = () => { const t=peek(); if(!t)throw new Error("Unexpected end of expression"); if(t.type==="number"){take();return Number(t.value);} if(t.type==="name"){const n=take().value.toLowerCase(); if(n==="pi")return Math.PI;if(n==="e")return Math.E;take("(");const x=expr();take(")");const f={sqrt:Math.sqrt,abs:Math.abs,sin:Math.sin,cos:Math.cos,tan:Math.tan,log:Math.log10,ln:Math.log,exp:Math.exp};if(!f[n])throw new Error(`Unknown function: ${n}`);return f[n](x);} if(t.value==="("){take("(");const v=expr();take(")");return v;} throw new Error(`Unexpected token: ${t.value}`); };
+  const result=expr(); if(i<tokens.length)throw new Error(`Unexpected token: ${tokens[i].value}`); return result;
+}
+
+function tokenizeMath(source) {
+  const out=[]; let i=0; while(i<source.length){const ch=source[i]; if(/\s/.test(ch)){i++;continue;} if(/[0-9.]/.test(ch)){const m=source.slice(i).match(/^(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?/i); if(!m)throw new Error("Invalid number");out.push({type:"number",value:m[0]});i+=m[0].length;continue;} if(/[a-z]/i.test(ch)){const m=source.slice(i).match(/^[a-z]+/i);out.push({type:"name",value:m[0]});i+=m[0].length;continue;} if("+-*/%^()".includes(ch)){out.push({type:"symbol",value:ch});i++;continue;} throw new Error(`Unsupported character: ${ch}`);} return out;
+}
+
+function runSandboxedCode() {
+  const code=codeRunnerInput.value; codeOutput.textContent="Running…";
+  const iframe=document.createElement("iframe"); iframe.setAttribute("sandbox","allow-scripts"); iframe.style.display="none";
+  const runId=`picklo-${Date.now()}-${Math.random()}`;
+  const handler=(event)=>{const data=event.data;if(!data||data.runId!==runId)return;window.removeEventListener("message",handler);iframe.remove();const lines=[...(data.logs||[])];if(data.error)lines.push(`Error: ${data.error}`);if(data.hasResult)lines.push(`Result: ${data.result}`);codeOutput.textContent=lines.length?lines.join("\n"):"Finished with no output.";};
+  window.addEventListener("message",handler);
+  iframe.srcdoc=`<!doctype html><script>const runId=${JSON.stringify(runId)},logs=[];const s=v=>{try{return typeof v==='string'?v:JSON.stringify(v)}catch{return String(v)}};console.log=(...a)=>logs.push(a.map(s).join(' '));console.warn=(...a)=>logs.push('Warning: '+a.map(s).join(' '));console.error=(...a)=>logs.push('Error: '+a.map(s).join(' '));try{const fn=new Function(${JSON.stringify(code)});const result=fn();parent.postMessage({runId,logs,hasResult:result!==undefined,result:s(result)},'*')}catch(e){parent.postMessage({runId,logs,error:e?.message||String(e)},'*')}<\/script>`;
+  document.body.appendChild(iframe);
+  setTimeout(()=>{if(document.body.contains(iframe)){window.removeEventListener("message",handler);iframe.remove();codeOutput.textContent="Execution timed out after 3 seconds.";}},3000);
+}
+
+function saveQuickNote() { const text=noteInput.value.trim(); if(!text)return; state.notes.unshift({id:crypto.randomUUID?crypto.randomUUID():`note-${Date.now()}`,text,createdAt:Date.now()});noteInput.value="";saveState();renderNotes(); }
+function renderNotes() { notesList.innerHTML=""; if(!state.notes.length){const e=document.createElement("div");e.className="memory-empty";e.textContent="No quick notes yet.";notesList.appendChild(e);return;} for(const note of state.notes){const item=document.createElement("div");item.className="note-item";const p=document.createElement("p");p.textContent=note.text;const b=document.createElement("button");b.type="button";b.textContent="Delete";b.addEventListener("click",()=>{state.notes=state.notes.filter(n=>n.id!==note.id);saveState();renderNotes();});item.append(p,b);notesList.appendChild(item);} }
+function showLocalTime() { const now=new Date();localToolOutput.textContent=`${now.toLocaleDateString([], {weekday:"long",year:"numeric",month:"long",day:"numeric"})} • ${now.toLocaleTimeString([], {hour:"2-digit",minute:"2-digit",second:"2-digit"})}`; }
+function useFileSearchTool() { closeSheets(); if(!localFiles.length){messageInput.value="I want to search my local files, but I have not added any yet.";} else {setMode("analyze",true);messageInput.value="Search my local files for: ";} autoResize();messageInput.focus(); }
+
+async function regenerateLastAssistant() {
+  if(!engine||isGenerating)return;const chat=getActiveChat();let index=-1;for(let i=chat.messages.length-1;i>=0;i--){if(chat.messages[i].role==="assistant"){index=i;break;}}if(index<0)return;let user=null;for(let i=index-1;i>=0;i--){if(chat.messages[i].role==="user"){user=chat.messages[i];break;}}if(!user)return;chat.messages=chat.messages.slice(0,index);if(chat.messages.at(-1)?.role==="user")chat.messages.pop();saveState();renderMessages();messageInput.value=user.content;autoResize();await sendMessage();
+}
+
 async function exportData() {
   const docs = await listLocalFiles();
   const payload = {
@@ -1301,7 +1401,7 @@ async function exportData() {
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
-  link.download = `picklo-v4.2.2-backup-${new Date().toISOString().slice(0, 10)}.json`;
+  link.download = `picklo-v5-backup-${new Date().toISOString().slice(0, 10)}.json`;
   document.body.appendChild(link);
   link.click();
   link.remove();
@@ -1318,7 +1418,7 @@ async function importData(event) {
     const importedState = parsed.state || parsed;
 
     if (!Array.isArray(importedState.chats) || !Array.isArray(importedState.memories)) {
-      throw new Error("This is not a valid Picklo V4.2.2 backup.");
+      throw new Error("This is not a valid Picklo V5 backup.");
     }
 
     if (!confirm("Replace this browser's current Picklo data with the imported backup?")) return;
@@ -1344,7 +1444,7 @@ async function importData(event) {
 }
 
 function openSheet(sheet) {
-  [settingsSheet, memorySheet, filesSheet, dataSheet, conversationsSheet, modeSheet]
+  [settingsSheet, memorySheet, filesSheet, toolsSheet, dataSheet, conversationsSheet, modeSheet]
     .forEach((item) => item.classList.add("hidden"));
 
   sheet.classList.remove("hidden");
@@ -1352,7 +1452,7 @@ function openSheet(sheet) {
 }
 
 function closeSheets() {
-  [settingsSheet, memorySheet, filesSheet, dataSheet, conversationsSheet, modeSheet]
+  [settingsSheet, memorySheet, filesSheet, toolsSheet, dataSheet, conversationsSheet, modeSheet]
     .forEach((item) => item.classList.add("hidden"));
   backdrop.classList.add("hidden");
 }
