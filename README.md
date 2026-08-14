@@ -2,154 +2,233 @@
 
 <img src="assets/picklo-logo.svg" alt="Picklo" width="520">
 
-# Picklo V6.1
+# Picklo V7
 
-### Performance Update
+### Agent Foundation
 
-<img src="https://img.shields.io/badge/Release-V6.1.0-5F56C9?style=for-the-badge" alt="V6.1">
-<img src="https://img.shields.io/badge/Startup-Automatic-2F8A5C?style=for-the-badge" alt="Automatic startup">
-<img src="https://img.shields.io/badge/Inference-Web_Worker-202020?style=for-the-badge" alt="Web Worker">
-<img src="https://img.shields.io/badge/Fast_Model-SmolLM2_360M-5367E8?style=for-the-badge" alt="Fast model">
+<img src="https://img.shields.io/badge/Release-V7.0.0-5F56C9?style=for-the-badge" alt="V7">
+<img src="https://img.shields.io/badge/Agent-Auto_Tools-2F8A5C?style=for-the-badge" alt="Agent tools">
+<img src="https://img.shields.io/badge/Startup-Automatic-202020?style=for-the-badge" alt="Automatic startup">
+<img src="https://img.shields.io/badge/Inference-Web_Worker-5367E8?style=for-the-badge" alt="Web Worker">
+
+<br><br>
+
+<img src="assets/picklo-v7-preview.png" alt="Picklo V7 interface" width="100%">
 
 </div>
 
 ---
 
-## What changed
+## V7 is the agent foundation
 
-Picklo V6.1 is focused on one thing: **making local AI feel faster**.
+V6.1 made Picklo faster. V7 adds a controlled routing layer that decides when a safe built-in tool should handle part of a request.
 
-### Automatic model startup
-
-The user no longer has to open Settings and manually start a model.
-
-Picklo now:
+The default router is intentionally application-level. Small fast models do not need to produce tool-call JSON for basic tasks such as arithmetic, date/time, notes, memory, or local-file retrieval.
 
 ```text
-Page opens
-   ↓
-Interface renders immediately
-   ↓
-Fast local model starts automatically in background
-   ↓
-Model is cached by the browser
-   ↓
-Composer becomes ready
+User message
+    │
+    ▼
+Picklo Agent Router
+    │
+    ├── Calculator ───────────────► direct result
+    ├── Local date/time ──────────► direct result
+    ├── Notes ────────────────────► save/read locally
+    ├── Memory ───────────────────► save locally
+    ├── File search ──────────────► retrieve context
+    ├── Code request ─────────────► prepare sandbox
+    │
+    └── General request
+             │
+             ▼
+       Local language model
 ```
 
-The default Fast profile uses **SmolLM2 360M q4f16** when the current WebLLM runtime exposes it.
+## Automatic safe tools
 
-### Important first-run behavior
+With **Agent tools = On**, normal chat can now invoke supported local tools automatically.
 
-A browser-local model still has to be downloaded at least once. V6.1 cannot remove that network transfer, but it reduces the first-run cost by choosing a much smaller model and starts the download automatically instead of making the user initiate it manually.
-
-After caching, later starts should reuse the browser cache.
-
-## Performance profiles
-
-### Fast
+### Calculator
 
 ```text
-Model preference   SmolLM2 360M
-Recent messages    8
-File context       ~2,400 characters
-Max response       320 tokens
+sqrt(144) + 12 * 3
 ```
 
-Designed for immediate everyday chat.
+Picklo routes the expression to its local calculator parser instead of asking the language model to guess the arithmetic.
 
-### Balanced
+### Local date and time
 
 ```text
-Model preference   Llama 3.2 1B
-Recent messages    14
-File context       ~4,500 characters
-Max response       600 tokens
+what time is it?
+what is today's date?
 ```
 
-Better answer quality while staying reasonably responsive.
+Picklo reads the browser device's local clock directly.
 
-### Quality
+### Memory
 
 ```text
-Model preference   SmolLM2 1.7B
-Recent messages    20
-File context       ~7,000 characters
-Max response       900 tokens
+remember that I prefer concise answers
 ```
 
-For tasks where response quality matters more than speed.
+V7 saves the detail to persistent Picklo memory immediately.
 
-## Web Worker inference
-
-V6.1 moves WebLLM inference into:
+### Quick notes
 
 ```text
-webllm-worker.js
+save a note: redesign the landing page tomorrow
+show my notes
 ```
 
-The worker performs the heavy model work away from the main UI thread.
+Quick notes remain separate from AI memory.
 
-This reduces competition between inference and:
-
-- typing;
-- scrolling;
-- streaming updates;
-- opening sheets;
-- other Picklo interface interactions.
-
-## Smarter document retrieval
-
-V6 searched local files on every message.
-
-V6.1 only retrieves local documents when:
-
-- Analyze mode is active; or
-- the message refers to files, PDFs, uploads, attachments or documents.
-
-Normal chat therefore avoids unnecessary retrieval work.
-
-## Shorter prompt processing
-
-Prompt history is now determined by the selected performance profile rather than always sending a large fixed history.
-
-This reduces the amount of conversation text the model must process before it can begin answering.
-
-## Generation speed display
-
-When WebLLM reports completion-token usage, Picklo displays an approximate:
+### Local file search
 
 ```text
-12.4 tok/s
+search my files for nitrate results
+according to my PDF, what was the conclusion?
 ```
 
-next to the selected performance mode.
+V7 invokes local document retrieval first and then gives the relevant passages to the language model.
 
-## Existing capabilities retained
+### JavaScript preparation
 
-V6.1 keeps:
+```text
+run javascript: console.log("hello")
+```
 
-- white light mode;
-- charcoal dark mode;
-- larger typography;
-- flat non-neon UI;
-- persistent chats;
-- memory;
+The router loads explicit JavaScript into the existing local sandbox but does **not** execute it automatically. The user still presses **Run**.
+
+## Visible agent activity
+
+V7 adds status states such as:
+
+```text
+Agent ready
+Using Calculator
+Searching local files
+Waiting for local model
+Thinking
+Answering
+```
+
+Tool-assisted responses also display a small tool badge in the conversation.
+
+The Tools panel keeps a short recent activity list so users can see what Picklo routed.
+
+## Tools can work before the model is ready
+
+The composer is available immediately.
+
+Calculator, date/time, notes and memory can respond even while the local language model is still loading.
+
+For ordinary AI requests, Picklo waits for the automatically starting model and then continues the pending request.
+
+## Agent controls
+
+Open **Settings → Agent tools**.
+
+```text
+On  — safe local tools can route automatically
+Off — chat only
+```
+
+The choice is stored locally.
+
+## Performance retained
+
+V7 keeps the V6.1 performance architecture:
+
+- automatic model startup;
+- Fast / Balanced / Quality modes;
+- Web Worker inference;
+- reduced prompt history in Fast mode;
+- smart document retrieval;
+- browser model caching;
+- tokens-per-second display when available.
+
+## Visual system retained
+
+### Light
+
+```text
+Background   #FFFFFF
+Text         #1F1F1F
+```
+
+### Dark
+
+```text
+Background   #171717
+Surface      #222222
+Text         #FFFFFF
+```
+
+V7 keeps the flat, high-contrast V6 styling without neon effects.
+
+## V6.1 → V7 migration
+
+When V7 has no existing local state, it checks for V6.1 data and imports supported values:
+
+- conversations;
+- memories;
 - notes;
-- local files;
-- file retrieval;
-- Calculator;
-- JavaScript sandbox;
-- General / Write / Code / Analyze modes;
-- Copy / Regenerate;
-- fixed header and composer;
-- streaming responses.
+- theme;
+- model selection;
+- performance profile;
+- response mode.
 
-## V6 → V6.1 migration
+## Project structure
 
-When no V6.1 state exists, Picklo imports the existing V6 state.
+```text
+picklo-v7/
+├── assets/
+│   ├── picklo-logo.svg
+│   ├── picklo-mark.svg
+│   └── picklo-v7-preview.png
+├── agent-router.js
+├── app.js
+├── index.html
+├── manifest.webmanifest
+├── styles.css
+├── sw.js
+├── webllm-worker.js
+└── README.md
+```
 
-Chats, memory, notes, theme, selected model and preferences remain available.
+## Evolution
+
+```text
+V1  Browser AI
+ ↓
+V2  Memory + saved chats
+ ↓
+V3  Local document retrieval
+ ↓
+V4  Real chat interface
+ ↓
+V5  Built-in tools
+ ↓
+V6  Readability
+ ↓
+V6.1 Automatic fast startup
+ ↓
+V7  Automatic safe tool routing
+```
+
+## Boundaries
+
+V7 does not silently give the AI unrestricted control of the browser or device.
+
+It does not automatically:
+
+- browse arbitrary websites;
+- access the operating-system filesystem;
+- execute shell commands;
+- execute JavaScript without explicit user confirmation;
+- send local data to external services.
+
+The agent layer is intentionally constrained.
 
 ---
 
@@ -157,8 +236,8 @@ Chats, memory, notes, theme, selected model and preferences remain available.
 
 <img src="assets/picklo-mark.svg" alt="Picklo" width="76">
 
-### Picklo V6.1
+### Picklo V7
 
-**Open Picklo. The AI starts itself.**
+**Chat normally. Picklo routes the safe tools.**
 
 </div>

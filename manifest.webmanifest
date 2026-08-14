@@ -1,7 +1,7 @@
 {
-  "name": "Picklo V6.1",
+  "name": "Picklo V7",
   "short_name": "Picklo",
-  "description": "Picklo V6.1 \u2014 automatic fast model startup, Web Worker inference and optimized context for faster replies.",
+  "description": "Picklo V7 \u2014 local-first AI with automatic safe tool routing, visible agent activity, fast startup and local file context.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

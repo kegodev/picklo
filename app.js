@@ -1,8 +1,9 @@
 import * as webllm from "https://esm.run/@mlc-ai/web-llm";
+import { classifyAgentIntent } from "./agent-router.js";
 
-const APP_VERSION = "6.1.0";
-const STORAGE_KEY = "picklo-v6.1-state";
-const V6_STORAGE_KEY = "picklo-v6-state";
+const APP_VERSION = "7.0.0";
+const STORAGE_KEY = "picklo-v7-state";
+const V61_STORAGE_KEY = "picklo-v6.1-state";
 const FILE_DB = "picklo-v3-files";
 const FILE_STORE = "documents";
 const MAX_FILE_CHARS = 240000;
@@ -50,7 +51,7 @@ const MODE_PROMPTS = {
 };
 
 const BASE_SYSTEM_PROMPT = `
-You are Picklo V6.1, a general-purpose personal AI assistant that runs locally in the user's browser.
+You are Picklo V7, a general-purpose personal AI assistant that runs locally in the user's browser.
 You are useful for questions, writing, coding, planning, brainstorming, explanations, decision support and document analysis.
 Do not claim to be ChatGPT or OpenAI. When asked who you are, say you are Picklo.
 
@@ -63,6 +64,7 @@ GENERAL RULES:
 6. When LOCAL FILE CONTEXT is supplied, treat it as user-provided reference material. Do not claim a file says something it does not say.
 7. When the local context is insufficient, say so.
 8. Persistent memory is user-provided context. Use it only when relevant.
+9. The Picklo application may execute safe local tools before you answer. When TOOL RESULT CONTEXT is provided, use that result as trusted application context and do not pretend you computed or retrieved it yourself.
 `.trim();
 
 const defaultState = () => ({
@@ -73,6 +75,8 @@ const defaultState = () => ({
   defaultMode: "general",
   theme: "light",
   performanceProfile: "fast",
+  autoTools: true,
+  agentHistory: [],
   notes: [],
   memories: [],
   chats: []
@@ -164,6 +168,13 @@ const themeToggleBtn = $("themeToggleBtn");
 const themeSelect = $("themeSelect");
 const performanceSelect = $("performanceSelect");
 const performanceStatus = $("performanceStatus");
+const autoToolsSelect = $("autoToolsSelect");
+const agentStatus = $("agentStatus");
+const agentActivityBar = $("agentActivityBar");
+const agentActivityText = $("agentActivityText");
+const agentCardStatus = $("agentCardStatus");
+const agentToolCount = $("agentToolCount");
+const agentHistoryList = $("agentHistoryList");
 
 const toolsBtn = $("toolsBtn");
 const composerToolsBtn = $("composerToolsBtn");
@@ -194,6 +205,13 @@ async function boot() {
   defaultModeSelect.value = state.defaultMode || "general";
   themeSelect.value = state.theme || "light";
   performanceSelect.value = state.performanceProfile || "fast";
+  autoToolsSelect.value = state.autoTools === false ? "off" : "on";
+  renderAgentHistory();
+
+  // V7 allows typing immediately. Safe local tools can answer while the model starts.
+  messageInput.disabled = false;
+  sendBtn.disabled = false;
+  messageInput.placeholder = "Message Picklo…";
 
   setMode(state.activeMode || state.defaultMode || "general", false);
   renderAll();
@@ -236,8 +254,8 @@ function bindEvents() {
   panelModelBtn.addEventListener("click", () => openSheet(settingsSheet));
   startButton.addEventListener("click", () => openSheet(settingsSheet));
 
-  toolsBtn.addEventListener("click", () => { renderNotes(); openSheet(toolsSheet); });
-  composerToolsBtn.addEventListener("click", () => { renderNotes(); openSheet(toolsSheet); });
+  toolsBtn.addEventListener("click", () => { renderNotes(); renderAgentHistory(); openSheet(toolsSheet); });
+  composerToolsBtn.addEventListener("click", () => { renderNotes(); renderAgentHistory(); openSheet(toolsSheet); });
   document.querySelectorAll("[data-tool-tab]").forEach((button) => button.addEventListener("click", () => switchToolTab(button.dataset.toolTab)));
   calculatorRunBtn.addEventListener("click", runCalculator);
   calculatorInput.addEventListener("keydown", (event) => { if (event.key === "Enter") runCalculator(); });
@@ -269,7 +287,7 @@ function bindEvents() {
   document.querySelectorAll("[data-mobile-action]").forEach((button) => {
     button.addEventListener("click", () => {
       const action = button.dataset.mobileAction;
-      if (action === "tools") { renderNotes(); openSheet(toolsSheet); }
+      if (action === "tools") { renderNotes(); renderAgentHistory(); openSheet(toolsSheet); }
       if (action === "files") openSheet(filesSheet);
       if (action === "memory") {
         renderMemory();
@@ -310,6 +328,13 @@ function bindEvents() {
 
   themeSelect.addEventListener("change", () => {
     applyTheme(themeSelect.value, true);
+  });
+
+  autoToolsSelect.addEventListener("change", () => {
+    state.autoTools = autoToolsSelect.value !== "off";
+    saveState();
+    renderAgentHistory();
+    setAgentIdle();
   });
 
   performanceSelect.addEventListener("change", async () => {
@@ -430,10 +455,12 @@ function loadState() {
     const current = localStorage.getItem(STORAGE_KEY);
     if (current) return normalizeState(JSON.parse(current));
 
-    const v6 = localStorage.getItem(V6_STORAGE_KEY);
-    if (v6) {
-      const migrated = normalizeState(JSON.parse(v6));
+    const v61 = localStorage.getItem(V61_STORAGE_KEY);
+    if (v61) {
+      const migrated = normalizeState(JSON.parse(v61));
       if (!migrated.performanceProfile) migrated.performanceProfile = "fast";
+      if (typeof migrated.autoTools !== "boolean") migrated.autoTools = true;
+      if (!Array.isArray(migrated.agentHistory)) migrated.agentHistory = [];
       migrated.version = APP_VERSION;
       localStorage.setItem(STORAGE_KEY, JSON.stringify(migrated));
       return migrated;
@@ -449,6 +476,8 @@ function normalizeState(parsed) {
     ...defaultState(),
     ...parsed,
     performanceProfile: PERFORMANCE_PROFILES[parsed?.performanceProfile] ? parsed.performanceProfile : "fast",
+    autoTools: typeof parsed?.autoTools === "boolean" ? parsed.autoTools : true,
+    agentHistory: Array.isArray(parsed?.agentHistory) ? parsed.agentHistory.slice(0, 20) : [],
     notes: Array.isArray(parsed?.notes) ? parsed.notes : [],
     memories: Array.isArray(parsed?.memories) ? parsed.memories : [],
     chats: Array.isArray(parsed?.chats) ? parsed.chats : []
@@ -696,6 +725,7 @@ function renderMessages() {
     appendMessageToDOM(message.role, message.content, {
       time: message.createdAt,
       sources: message.sources || [],
+      tool: message.tool || "",
       scroll: false
     });
   }
@@ -739,6 +769,13 @@ function appendMessageToDOM(role, content, options = {}) {
       sources.appendChild(chip);
     });
     bubble.appendChild(sources);
+  }
+
+  if (options.tool) {
+    const usedTool = document.createElement("span");
+    usedTool.className = "tool-used";
+    usedTool.textContent = `Used ${options.tool}`;
+    bubble.appendChild(usedTool);
   }
 
   const time = document.createElement("time");
@@ -814,7 +851,8 @@ function applyPerformanceProfile(profileName, persist = true, updateModel = true
 }
 
 async function autoStartModel() {
-  if (engine || modelLoadPromise || isGenerating) return;
+  if (engine) return engine;
+  if (modelLoadPromise) return modelLoadPromise;
 
   if (!("gpu" in navigator)) {
     setRuntime("WebGPU unavailable", "Use a WebGPU-capable browser", "error");
@@ -831,7 +869,7 @@ async function autoStartModel() {
     modelSelect.value = profile.preferredModel;
   }
 
-  await loadSelectedModel({ automatic: true });
+  return loadSelectedModel({ automatic: true });
 }
 
 function populateModels() {
@@ -1013,7 +1051,7 @@ function setRuntime(title, detail, stateName = "idle") {
 
 async function sendMessage() {
   const content = messageInput.value.trim();
-  if (!content || !engine || isGenerating) return;
+  if (!content || isGenerating) return;
 
   const chat = getActiveChat();
   isGenerating = true;
@@ -1027,36 +1065,98 @@ async function sendMessage() {
   if (chat.title === "New chat") chat.title = makeTitle(content);
   chat.updatedAt = Date.now();
 
-  const remembered = parseRememberCommand(content);
-  if (remembered) addMemory(remembered);
-
-  const retrieved = shouldUseLocalFiles(content)
-    ? await retrieveLocalContext(content)
-    : [];
-  const sourceNames = [...new Set(retrieved.map((item) => item.name))];
-  activeFileSources = sourceNames;
-
   saveState();
   renderChats();
   renderHeader();
   renderMessages();
-  renderContext();
 
   messageInput.value = "";
   autoResize();
 
-  const assistantBubble = appendMessageToDOM("assistant", "", { time: Date.now() });
-  assistantBubble.classList.add("typing");
-  assistantBubble.textContent = "";
-
-  let fullReply = "";
-  let completionTokens = 0;
-  const generationStartedAt = performance.now();
-  const profile = getPerformanceProfile();
+  let route = null;
 
   try {
+    route = state.autoTools ? await routeAgentTool(content) : null;
+
+    if (route?.handled) {
+      chat.messages.push({
+        role: "assistant",
+        content: route.reply,
+        createdAt: Date.now(),
+        tool: route.tool || ""
+      });
+      chat.updatedAt = Date.now();
+
+      saveState();
+      renderMessages();
+      renderChats();
+      renderHeader();
+      setAgentIdleSoon();
+      return;
+    }
+
+    const forceFiles = Boolean(route?.forceFiles);
+    const shouldRetrieve = forceFiles || shouldUseLocalFiles(content);
+
+    let retrieved = [];
+    if (shouldRetrieve) {
+      setAgentActivity("Searching local files", "File search");
+      retrieved = await retrieveLocalContext(route?.query || content);
+      recordAgentActivity(
+        "File search",
+        retrieved.length
+          ? `Found ${retrieved.length} relevant passage${retrieved.length === 1 ? "" : "s"}`
+          : "No relevant passages found"
+      );
+    }
+
+    const sourceNames = [...new Set(retrieved.map((item) => item.name))];
+    activeFileSources = sourceNames;
+    renderContext();
+
+    if (!engine) {
+      setAgentActivity("Waiting for the local model to finish starting", "Model");
+      try {
+        await autoStartModel();
+      } catch (error) {
+        console.warn("Model startup while sending failed:", error);
+      }
+    }
+
+    if (!engine) {
+      chat.messages.push({
+        role: "assistant",
+        content: "I could not start the local language model on this device. My built-in local tools still work, but normal AI replies need a WebGPU-compatible model to finish loading.",
+        createdAt: Date.now(),
+        tool: "Runtime"
+      });
+      chat.updatedAt = Date.now();
+      saveState();
+      renderMessages();
+      renderChats();
+      setAgentIdleSoon();
+      return;
+    }
+
+    setAgentActivity(
+      route?.toolName ? `Using ${route.toolName} and answering` : "Thinking",
+      route?.toolName || "Model"
+    );
+
+    const assistantBubble = appendMessageToDOM("assistant", "", {
+      time: Date.now(),
+      tool: route?.toolName || (retrieved.length ? "File search" : "")
+    });
+    assistantBubble.classList.add("typing");
+    assistantBubble.textContent = "";
+
+    let fullReply = "";
+    let completionTokens = 0;
+    const generationStartedAt = performance.now();
+    const profile = getPerformanceProfile();
+
     const stream = await engine.chat.completions.create({
-      messages: buildModelMessages(chat, retrieved),
+      messages: buildModelMessages(chat, retrieved, route?.toolContext || ""),
       temperature: profile.temperature,
       top_p: 0.9,
       max_tokens: profile.maxTokens,
@@ -1064,12 +1164,22 @@ async function sendMessage() {
       stream_options: { include_usage: true }
     });
 
+    let receivedFirstToken = false;
+
     for await (const chunk of stream) {
       const delta = chunk.choices?.[0]?.delta?.content || "";
+
       if (chunk.usage?.completion_tokens) {
         completionTokens = chunk.usage.completion_tokens;
       }
+
       if (!delta) continue;
+
+      if (!receivedFirstToken) {
+        receivedFirstToken = true;
+        setAgentActivity("Answering", route?.toolName || "Model");
+      }
+
       fullReply += delta;
       assistantBubble.textContent = fullReply;
       scrollToBottom();
@@ -1103,43 +1213,39 @@ async function sendMessage() {
       role: "assistant",
       content: fullReply,
       createdAt: Date.now(),
-      sources: sourceNames
+      sources: sourceNames,
+      tool: route?.toolName || (retrieved.length ? "File search" : "")
     });
     chat.updatedAt = Date.now();
 
     saveState();
     renderMessages();
     renderChats();
+    renderHeader();
   } catch (error) {
-    assistantBubble.classList.remove("typing");
+    console.error(error);
 
-    if (generationWasStopped) {
-      fullReply = fullReply.trim()
-        ? `${fullReply.trim()}\n\n[Generation stopped]`
-        : "[Generation stopped]";
-
-      chat.messages.push({
-        role: "assistant",
-        content: fullReply,
-        createdAt: Date.now(),
-        sources: sourceNames
-      });
-
-      chat.updatedAt = Date.now();
-      saveState();
-      renderMessages();
-    } else {
-      assistantBubble.closest(".message-row")?.remove();
-      addError(`Picklo could not finish that response. ${error?.message || String(error)}`);
-    }
+    chat.messages.push({
+      role: "assistant",
+      content: generationWasStopped
+        ? "[Generation stopped]"
+        : `I could not complete that request. ${error?.message || String(error)}`,
+      createdAt: Date.now(),
+      tool: route?.toolName || ""
+    });
+    chat.updatedAt = Date.now();
+    saveState();
+    renderMessages();
+    renderChats();
   } finally {
     isGenerating = false;
     setGeneratingUI(false);
+    setAgentIdleSoon();
     messageInput.focus();
   }
 }
 
-function buildModelMessages(chat, retrieved) {
+function buildModelMessages(chat, retrieved, toolContext = "") {
   const memoryBlock = state.memories.length
     ? `PERSISTENT MEMORY:\n${state.memories.map((item, index) => `${index + 1}. ${item.text}`).join("\n")}`
     : "";
@@ -1152,7 +1258,8 @@ function buildModelMessages(chat, retrieved) {
     BASE_SYSTEM_PROMPT,
     `CURRENT MODE:\n${MODE_PROMPTS[state.activeMode] || MODE_PROMPTS.general}`,
     memoryBlock,
-    localContext
+    localContext,
+    toolContext ? `TOOL RESULT CONTEXT:\n${toolContext}` : ""
   ].filter(Boolean).join("\n\n");
 
   return [
@@ -1187,8 +1294,8 @@ async function stopGeneration() {
 }
 
 function setGeneratingUI(generating) {
-  messageInput.disabled = generating || !engine;
-  sendBtn.disabled = generating || !engine;
+  messageInput.disabled = generating;
+  sendBtn.disabled = generating;
   stopBtn.classList.toggle("hidden", !generating);
   stopBtn.disabled = false;
   stopBtn.textContent = "Stop";
@@ -1503,6 +1610,235 @@ function renderContext() {
   contextBanner.classList.remove("hidden");
 }
 
+function setAgentActivity(text, toolName = "") {
+  agentActivityText.textContent = text;
+  agentActivityBar.classList.remove("hidden");
+  agentStatus.textContent = toolName ? `Using ${toolName}` : "Working";
+}
+
+function setAgentIdle() {
+  agentActivityBar.classList.add("hidden");
+  agentStatus.textContent = state.autoTools === false ? "Agent off" : "Agent ready";
+}
+
+function setAgentIdleSoon() {
+  setTimeout(setAgentIdle, 650);
+}
+
+function recordAgentActivity(tool, detail) {
+  const entry = {
+    id: crypto.randomUUID ? crypto.randomUUID() : `tool-${Date.now()}-${Math.random()}`,
+    tool,
+    detail,
+    createdAt: Date.now()
+  };
+  state.agentHistory.unshift(entry);
+  state.agentHistory = state.agentHistory.slice(0, 20);
+  saveState();
+  renderAgentHistory();
+}
+
+function renderAgentHistory() {
+  if (!agentHistoryList) return;
+
+  const enabled = state.autoTools !== false;
+  agentCardStatus.textContent = enabled ? "Agent routing is on" : "Agent routing is off";
+  agentStatus.textContent = enabled ? "Agent ready" : "Agent off";
+
+  const count = state.agentHistory.length;
+  agentToolCount.textContent = `${count} call${count === 1 ? "" : "s"}`;
+
+  agentHistoryList.innerHTML = "";
+
+  if (!count) {
+    const empty = document.createElement("div");
+    empty.className = "agent-history-empty";
+    empty.textContent = "No automatic tool activity yet.";
+    agentHistoryList.appendChild(empty);
+    return;
+  }
+
+  for (const entry of state.agentHistory.slice(0, 5)) {
+    const row = document.createElement("div");
+    row.className = "agent-history-row";
+
+    const text = document.createElement("div");
+    const strong = document.createElement("strong");
+    strong.textContent = entry.tool;
+    const small = document.createElement("small");
+    small.textContent = entry.detail || "Completed";
+    text.append(strong, small);
+
+    const time = document.createElement("time");
+    time.textContent = new Date(entry.createdAt).toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit"
+    });
+
+    row.append(text, time);
+    agentHistoryList.appendChild(row);
+  }
+}
+
+async function routeAgentTool(content) {
+  const intent = classifyAgentIntent(content, { hasFiles: localFiles.length > 0 });
+  if (!intent) return null;
+
+  if (intent.type === "memory_save") {
+    setAgentActivity("Saving memory", "Memory");
+    addMemory(intent.value);
+    recordAgentActivity("Memory", "Saved a persistent memory");
+    return {
+      handled: true,
+      tool: "Memory",
+      reply: `Saved to memory: **${intent.value}**`
+    };
+  }
+
+  if (intent.type === "note_save") {
+    setAgentActivity("Saving quick note", "Notes");
+    state.notes.unshift({
+      id: crypto.randomUUID ? crypto.randomUUID() : `note-${Date.now()}`,
+      text: intent.value,
+      createdAt: Date.now()
+    });
+    saveState();
+    renderNotes();
+    recordAgentActivity("Notes", "Saved a quick note");
+    return {
+      handled: true,
+      tool: "Notes",
+      reply: `Saved as a quick note: **${intent.value}**`
+    };
+  }
+
+  if (intent.type === "notes_list") {
+    setAgentActivity("Reading local notes", "Notes");
+    recordAgentActivity("Notes", `Read ${state.notes.length} note${state.notes.length === 1 ? "" : "s"}`);
+
+    if (!state.notes.length) {
+      return {
+        handled: true,
+        tool: "Notes",
+        reply: "You do not have any quick notes saved yet."
+      };
+    }
+
+    return {
+      handled: true,
+      tool: "Notes",
+      reply: state.notes
+        .slice(0, 12)
+        .map((note, index) => `${index + 1}. ${note.text}`)
+        .join("\n")
+    };
+  }
+
+  if (intent.type === "time") {
+    setAgentActivity("Reading device time", "Local time");
+    const now = new Date();
+    const reply = now.toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit"
+    });
+    recordAgentActivity("Local time", reply);
+    return {
+      handled: true,
+      tool: "Local time",
+      reply: `Your device time is **${reply}**.`
+    };
+  }
+
+  if (intent.type === "date") {
+    setAgentActivity("Reading device date", "Local date");
+    const now = new Date();
+    const reply = now.toLocaleDateString([], {
+      weekday: "long",
+      year: "numeric",
+      month: "long",
+      day: "numeric"
+    });
+    recordAgentActivity("Local date", reply);
+    return {
+      handled: true,
+      tool: "Local date",
+      reply: `Your device date is **${reply}**.`
+    };
+  }
+
+  if (intent.type === "calculator") {
+    setAgentActivity("Calculating", "Calculator");
+
+    try {
+      const value = evaluateMathExpression(intent.expression);
+      const formatted = Number.isFinite(value)
+        ? String(Number(value.toPrecision(12)))
+        : String(value);
+
+      recordAgentActivity("Calculator", `${intent.expression} = ${formatted}`);
+
+      if (intent.explain) {
+        return {
+          handled: false,
+          toolName: "Calculator",
+          toolContext: `The calculator evaluated "${intent.expression}" and returned ${formatted}. Explain this result to the user without changing the computed value.`
+        };
+      }
+
+      return {
+        handled: true,
+        tool: "Calculator",
+        reply: `**${intent.expression} = ${formatted}**`
+      };
+    } catch (error) {
+      recordAgentActivity("Calculator", "Expression could not be evaluated");
+      return {
+        handled: true,
+        tool: "Calculator",
+        reply: `I could not calculate that expression: ${error?.message || "invalid expression"}.`
+      };
+    }
+  }
+
+  if (intent.type === "file_search") {
+    setAgentActivity("Preparing local file search", "File search");
+
+    if (!localFiles.length) {
+      recordAgentActivity("File search", "No local files available");
+      return {
+        handled: true,
+        tool: "File search",
+        reply: "There are no local files in Picklo yet. Attach a PDF, text file, or code file first."
+      };
+    }
+
+    return {
+      handled: false,
+      forceFiles: true,
+      query: intent.query || content,
+      toolName: "File search"
+    };
+  }
+
+  if (intent.type === "code_prepare") {
+    setAgentActivity("Preparing JavaScript sandbox", "Code sandbox");
+    codeRunnerInput.value = intent.code;
+    switchToolTab("code");
+    renderNotes();
+    openSheet(toolsSheet);
+    recordAgentActivity("Code sandbox", "Loaded JavaScript for manual execution");
+
+    return {
+      handled: true,
+      tool: "Code sandbox",
+      reply: "I loaded that JavaScript into the local sandbox. Review it, then press **Run code** when you want to execute it."
+    };
+  }
+
+  return null;
+}
+
 function switchToolTab(tab) {
   document.querySelectorAll("[data-tool-tab]").forEach((button) => button.classList.toggle("active", button.dataset.toolTab === tab));
   document.querySelectorAll("[data-tool-panel]").forEach((panel) => panel.classList.toggle("hidden", panel.dataset.toolPanel !== tab));
@@ -1566,7 +1902,7 @@ async function exportData() {
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
-  link.download = `picklo-v6.1-backup-${new Date().toISOString().slice(0, 10)}.json`;
+  link.download = `picklo-v7-backup-${new Date().toISOString().slice(0, 10)}.json`;
   document.body.appendChild(link);
   link.click();
   link.remove();
@@ -1583,7 +1919,7 @@ async function importData(event) {
     const importedState = parsed.state || parsed;
 
     if (!Array.isArray(importedState.chats) || !Array.isArray(importedState.memories)) {
-      throw new Error("This is not a valid Picklo V6.1 backup.");
+      throw new Error("This is not a valid Picklo V7 backup.");
     }
 
     if (!confirm("Replace this browser's current Picklo data with the imported backup?")) return;

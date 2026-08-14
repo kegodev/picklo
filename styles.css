@@ -1344,3 +1344,178 @@ html[data-theme="dark"] #performanceStatus {
   font-size: 12px;
   color: var(--muted);
 }
+
+
+/* =========================================================
+   Picklo V7 — Agent foundation
+   ========================================================= */
+
+.agent-status {
+  color: #2f7d57;
+  font-weight: 700;
+}
+
+.agent-activity {
+  flex: 0 0 auto;
+  width: min(760px, calc(100% - 32px));
+  min-height: 34px;
+  margin: 8px auto 0;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-2);
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  font-size: 12px;
+}
+
+.agent-activity-dot {
+  width: 8px;
+  height: 8px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--purple);
+  animation: agentPulse 1s ease-in-out infinite;
+}
+
+@keyframes agentPulse {
+  50% { opacity: .35; }
+}
+
+.tool-used {
+  display: inline-block;
+  margin-top: 8px;
+  margin-right: 5px;
+  padding: 3px 7px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface-3);
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.agent-card {
+  margin-bottom: 14px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface-3);
+  padding: 12px;
+}
+
+.agent-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.agent-card-label {
+  display: block;
+  color: var(--purple);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .08em;
+}
+
+.agent-card-head strong,
+.agent-card-head small {
+  display: block;
+}
+
+.agent-card-head strong {
+  margin-top: 4px;
+  color: var(--navy);
+  font-size: 14px;
+}
+
+.agent-card-head small {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.agent-card-badge {
+  flex: 0 0 auto;
+  padding: 5px 8px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.agent-history {
+  display: grid;
+  gap: 5px;
+  margin-top: 11px;
+}
+
+.agent-history-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border-top: 1px solid var(--border);
+  padding-top: 7px;
+}
+
+.agent-history-row div {
+  min-width: 0;
+  flex: 1;
+}
+
+.agent-history-row strong,
+.agent-history-row small {
+  display: block;
+}
+
+.agent-history-row strong {
+  color: var(--text);
+  font-size: 12px;
+}
+
+.agent-history-row small {
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 10px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.agent-history-row time,
+.agent-history-empty {
+  color: var(--muted-2);
+  font-size: 10px;
+}
+
+html[data-theme="dark"] .agent-status {
+  color: #8fd5ad !important;
+}
+
+html[data-theme="dark"] .agent-activity,
+html[data-theme="dark"] .agent-card,
+html[data-theme="dark"] .tool-used {
+  background: #222222 !important;
+  border-color: #3a3a3a !important;
+}
+
+html[data-theme="dark"] .agent-card-head strong,
+html[data-theme="dark"] .agent-history-row strong {
+  color: #ffffff !important;
+}
+
+@media (max-width: 820px) {
+  .agent-status {
+    display: none;
+  }
+
+  .agent-activity {
+    width: calc(100% - 20px);
+    font-size: 11px;
+  }
+}

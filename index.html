@@ -4,8 +4,8 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <meta name="theme-color" content="#fbfaf8" />
-  <meta name="description" content="Picklo V6.1 — a local-first general AI assistant with a refined chat-first interface." />
-  <title>Picklo V6.1</title>
+  <meta name="description" content="Picklo V7 — a local-first general AI assistant with a refined chat-first interface." />
+  <title>Picklo V7</title>
   <link rel="icon" href="assets/picklo-mark.svg" type="image/svg+xml" />
   <link rel="manifest" href="manifest.webmanifest" />
   <link rel="stylesheet" href="styles.css" />
@@ -92,7 +92,7 @@
           <div class="chat-heading">
             <div class="chat-title-line">
               <h1 id="headerChatTitle">New chat</h1>
-              <span class="version">V6.1</span>
+              <span class="version">V7</span>
             </div>
             <div class="chat-status">
               <span id="assistantSubtitle">Your general-purpose personal AI</span>
@@ -100,6 +100,8 @@
               <strong id="modelStatus">Starting automatically…</strong>
               <i>•</i>
               <b id="performanceStatus">Fast</b>
+              <i>•</i>
+              <b class="agent-status" id="agentStatus">Agent ready</b>
             </div>
           </div>
         </div>
@@ -136,6 +138,11 @@
           <strong id="progressPercent">0%</strong>
         </div>
         <div class="progress-track"><div class="progress-bar" id="progressBar"></div></div>
+      </div>
+
+      <div class="agent-activity hidden" id="agentActivityBar" aria-live="polite">
+        <span class="agent-activity-dot"></span>
+        <span id="agentActivityText">Picklo is working…</span>
       </div>
 
       <section class="messages" id="messages" aria-live="polite"></section>
@@ -178,7 +185,7 @@
         </div>
 
         <div class="composer-footer">
-          <span id="composerNote">Chats, memory and files stay in this browser.</span>
+          <span id="composerNote">Agent tools, chats, memory and files stay in this browser.</span>
           <span>Picklo can make mistakes. Check important information.</span>
         </div>
       </form>
@@ -208,6 +215,15 @@
       <button class="sheet-close" data-close-sheet type="button">×</button>
     </header>
     <div class="sheet-body">
+      <div class="setting-group">
+        <label class="field-label" for="autoToolsSelect">Agent tools</label>
+        <select class="select-field" id="autoToolsSelect">
+          <option value="on">On — use safe local tools automatically</option>
+          <option value="off">Off — chat only</option>
+        </select>
+        <p class="help-text">When enabled, Picklo can route calculations, date/time, notes, memory and local-file requests to built-in tools before using the language model.</p>
+      </div>
+
       <div class="setting-group">
         <label class="field-label" for="performanceSelect">Performance</label>
         <select class="select-field" id="performanceSelect">
@@ -239,7 +255,7 @@
         <label class="field-label" for="themeSelect">Appearance</label>
         <select class="select-field" id="themeSelect">
           <option value="light">Light — White</option>
-          <option value="dark">Dark — Black</option>
+          <option value="dark">Dark — Charcoal</option>
         </select>
         <p class="help-text">Your theme is saved locally and restored when Picklo opens again.</p>
       </div>
@@ -289,10 +305,22 @@
   <section class="sheet tools-sheet hidden" id="toolsSheet" role="dialog" aria-modal="true" aria-labelledby="toolsTitle">
     <div class="sheet-handle"></div>
     <header class="sheet-header">
-      <div><span class="eyebrow">PICKLO V6</span><h2 id="toolsTitle">Tools</h2><p>Local utilities that work without a Picklo backend.</p></div>
+      <div><span class="eyebrow">PICKLO V7</span><h2 id="toolsTitle">Tools</h2><p>Local utilities that work without a Picklo backend.</p></div>
       <button class="sheet-close" data-close-sheet type="button">×</button>
     </header>
     <div class="sheet-body">
+      <div class="agent-card">
+        <div class="agent-card-head">
+          <div>
+            <span class="agent-card-label">AUTO TOOLS</span>
+            <strong id="agentCardStatus">Agent routing is on</strong>
+            <small>Safe local tasks can run before the language model.</small>
+          </div>
+          <span class="agent-card-badge" id="agentToolCount">0 calls</span>
+        </div>
+        <div class="agent-history" id="agentHistoryList"></div>
+      </div>
+
       <div class="tool-tabs">
         <button class="active" data-tool-tab="calculator" type="button">Calculator</button>
         <button data-tool-tab="code" type="button">Code</button>
