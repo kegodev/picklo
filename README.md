@@ -2,12 +2,12 @@
 
 <img src="assets/picklo-logo.svg" alt="Picklo" width="520">
 
-# Picklo V7.1
+# Picklo V7.2
 
-### Agent Foundation
+### A KM Digital Labs Product
 
-<img src="https://img.shields.io/badge/Release-V7.1.0-5F56C9?style=for-the-badge" alt="V7">
-<img src="https://img.shields.io/badge/Agent-Auto_Tools-2F8A5C?style=for-the-badge" alt="Agent tools">
+<img src="https://img.shields.io/badge/Release-V7.2.0-5F56C9?style=for-the-badge" alt="V7.2">
+<img src="https://img.shields.io/badge/Agent-Private_Tools-2F8A5C?style=for-the-badge" alt="Private agent tools">
 <img src="https://img.shields.io/badge/Startup-Automatic-202020?style=for-the-badge" alt="Automatic startup">
 <img src="https://img.shields.io/badge/Inference-Web_Worker-5367E8?style=for-the-badge" alt="Web Worker">
 
@@ -20,6 +20,20 @@
 </div>
 
 ---
+
+## V7.2 answer-quality and privacy update
+
+Picklo now performs calculations and safe code preparation privately, then shows the finished answer instead of exposing tool status, scratch work, or execution badges.
+
+- **More reliable answers:** lower sampling temperatures and stronger verification instructions reduce guessing.
+- **Exact arithmetic:** percentage questions, word operations, exponent syntax and ordinary expressions route through the deterministic local calculator.
+- **Private processing:** calculation, code and model activity stay hidden from the conversation.
+- **File-only visibility:** tool activity is shown only when Picklo actually returns a downloadable file.
+- **Cleaner code handling:** JavaScript can be prepared without automatically opening the sandbox.
+- **Visible uploads:** attached documents appear as file cards in chat and update to show when they were analyzed.
+- **Automatic document context:** newly uploaded PDF, Word, rich-text, text and code documents are included in the next response.
+- **Downloadable results:** Picklo can return HTML, CSS, JavaScript, TypeScript, Python, PDF, Word-compatible, Markdown, JSON, CSV, XML, YAML, SQL and many other code/text files.
+- **Refined dark mode:** a calm charcoal, soft-white and muted-grey palette replaces the previous robotic black-and-purple treatment.
 
 ## V7.1 performance update
 
@@ -110,9 +124,9 @@ run javascript: console.log("hello")
 
 The router loads explicit JavaScript into the existing local sandbox but does **not** execute it automatically. The user still presses **Run**.
 
-## Visible agent activity
+## Private agent activity
 
-V7 adds status states such as:
+Picklo keeps calculation, code and model activity behind the finished answer. It does not display states such as:
 
 ```text
 Agent ready
@@ -123,9 +137,7 @@ Thinking
 Answering
 ```
 
-Tool-assisted responses also display a small tool badge in the conversation.
-
-The Tools panel keeps a short recent activity list so users can see what Picklo routed.
+Tool badges and recent activity are reserved for files that Picklo returns to the user.
 
 ## Tools can work before the model is ready
 
@@ -231,6 +243,8 @@ V6.1 Automatic fast startup
 V7  Automatic safe tool routing
  ↓
 V7.1 Faster startup, caching and streaming
+ ↓
+V7.2 More accurate answers and private processing
 ```
 
 ## Boundaries
@@ -253,9 +267,8 @@ The agent layer is intentionally constrained.
 
 <img src="assets/picklo-mark.svg" alt="Picklo" width="76">
 
-### Picklo V7.1
+### Picklo V7.2
 
-**Chat normally. Picklo routes the safe tools.**
+**Chat normally. Picklo checks privately and returns the finished answer.**
 
 </div>
-
