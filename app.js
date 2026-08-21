@@ -1,13 +1,14 @@
 import * as webllm from "https://esm.run/@mlc-ai/web-llm";
 import { classifyAgentIntent } from "./agent-router.js";
 
-const APP_VERSION = "7.0.0";
+const APP_VERSION = "7.1.0";
 const STORAGE_KEY = "picklo-v7-state";
 const V61_STORAGE_KEY = "picklo-v6.1-state";
 const FILE_DB = "picklo-v3-files";
 const FILE_STORE = "documents";
 const MAX_FILE_CHARS = 240000;
 const MAX_CONTEXT_CHARS = 7000;
+const STREAM_RENDER_INTERVAL_MS = 40;
 
 const PREFERRED_MODELS = [
   { id: "SmolLM2-360M-Instruct-q4f16_1-MLC", label: "SmolLM2 360M", note: "Instant" },
@@ -20,25 +21,25 @@ const PERFORMANCE_PROFILES = {
   fast: {
     label: "Fast",
     preferredModel: "SmolLM2-360M-Instruct-q4f16_1-MLC",
-    recentMessages: 8,
-    contextChars: 2400,
-    maxTokens: 320,
-    temperature: 0.65
+    recentMessages: 6,
+    contextChars: 1800,
+    maxTokens: 240,
+    temperature: 0.6
   },
   balanced: {
     label: "Balanced",
     preferredModel: "Llama-3.2-1B-Instruct-q4f16_1-MLC",
-    recentMessages: 14,
-    contextChars: 4500,
-    maxTokens: 600,
-    temperature: 0.7
+    recentMessages: 10,
+    contextChars: 3600,
+    maxTokens: 480,
+    temperature: 0.68
   },
   quality: {
     label: "Quality",
     preferredModel: "SmolLM2-1.7B-Instruct-q4f16_1-MLC",
-    recentMessages: 20,
-    contextChars: 7000,
-    maxTokens: 900,
+    recentMessages: 16,
+    contextChars: 6000,
+    maxTokens: 720,
     temperature: 0.72
   }
 };
@@ -222,13 +223,9 @@ async function boot() {
     });
   }
 
-  // Show the interface first, then start the fastest local model automatically.
+  // Start after the first painted frame instead of waiting for browser idle time.
   const begin = () => autoStartModel().catch((error) => console.warn("Auto-start failed:", error));
-  if ("requestIdleCallback" in window) {
-    requestIdleCallback(begin, { timeout: 350 });
-  } else {
-    setTimeout(begin, 120);
-  }
+  requestAnimationFrame(() => setTimeout(begin, 0));
 }
 
 function bindEvents() {
@@ -959,7 +956,7 @@ async function loadSelectedModel(options = {}) {
   modelLoadPromise = (async () => {
     try {
       if (!engine) {
-        const worker = new Worker("./webllm-worker.js", { type: "module" });
+        const worker = new Worker("./webllm-worker.js", { type: "module", name: "picklo-webllm" });
         engine = await webllm.CreateWebWorkerMLCEngine(
           worker,
           selected,
@@ -1165,6 +1162,7 @@ async function sendMessage() {
     });
 
     let receivedFirstToken = false;
+    let lastStreamRender = 0;
 
     for await (const chunk of stream) {
       const delta = chunk.choices?.[0]?.delta?.content || "";
@@ -1181,9 +1179,19 @@ async function sendMessage() {
       }
 
       fullReply += delta;
-      assistantBubble.textContent = fullReply;
-      scrollToBottom();
+
+      // Rendering every token can slow the main thread even though inference is in a worker.
+      // Batch visual updates while retaining the complete streamed response.
+      const now = performance.now();
+      if (now - lastStreamRender >= STREAM_RENDER_INTERVAL_MS) {
+        assistantBubble.textContent = fullReply;
+        scrollToBottom();
+        lastStreamRender = now;
+      }
     }
+
+    assistantBubble.textContent = fullReply;
+    scrollToBottom();
 
     const elapsedSeconds = Math.max((performance.now() - generationStartedAt) / 1000, 0.001);
     lastGenerationStats = {

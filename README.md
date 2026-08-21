@@ -2,22 +2,33 @@
 
 <img src="assets/picklo-logo.svg" alt="Picklo" width="520">
 
-# Picklo V7
+# Picklo V7.1
 
 ### Agent Foundation
 
-<img src="https://img.shields.io/badge/Release-V7.0.0-5F56C9?style=for-the-badge" alt="V7">
+<img src="https://img.shields.io/badge/Release-V7.1.0-5F56C9?style=for-the-badge" alt="V7">
 <img src="https://img.shields.io/badge/Agent-Auto_Tools-2F8A5C?style=for-the-badge" alt="Agent tools">
 <img src="https://img.shields.io/badge/Startup-Automatic-202020?style=for-the-badge" alt="Automatic startup">
 <img src="https://img.shields.io/badge/Inference-Web_Worker-5367E8?style=for-the-badge" alt="Web Worker">
 
-<br><br>
+### [Open Picklo Live](https://kegodev.github.io/picklo/)
+
+<br>
 
 <img src="assets/picklo-v7-preview.png" alt="Picklo V7 interface" width="100%">
 
 </div>
 
 ---
+
+## V7.1 performance update
+
+Picklo now starts its local model immediately after the first painted frame, keeps repeat visits fast with a stale-while-revalidate app shell, uses leaner prompt budgets, and batches streamed text updates to reduce main-thread work.
+
+- **Faster startup:** no browser-idle delay before model loading.
+- **Faster repeat visits:** cached app files render immediately while updates refresh in the background.
+- **Smoother streaming:** the interface redraws at a controlled interval instead of once per token.
+- **Leaner inference:** Fast, Balanced and Quality modes send smaller histories and response budgets.
 
 ## V7 is the agent foundation
 
@@ -139,11 +150,12 @@ The choice is stored locally.
 
 V7 keeps the V6.1 performance architecture:
 
-- automatic model startup;
-- Fast / Balanced / Quality modes;
+- immediate model startup after first paint;
+- Fast / Balanced / Quality modes with leaner prompt budgets;
 - Web Worker inference;
-- reduced prompt history in Fast mode;
+- batched streaming UI updates;
 - smart document retrieval;
+- stale-while-revalidate app-shell caching;
 - browser model caching;
 - tokens-per-second display when available.
 
@@ -181,7 +193,10 @@ When V7 has no existing local state, it checks for V6.1 data and imports support
 ## Project structure
 
 ```text
-picklo-v7/
+picklo-v7.1/
+├── .github/
+│   └── workflows/
+│       └── deploy-pages.yml
 ├── assets/
 │   ├── picklo-logo.svg
 │   ├── picklo-mark.svg
@@ -214,6 +229,8 @@ V6  Readability
 V6.1 Automatic fast startup
  ↓
 V7  Automatic safe tool routing
+ ↓
+V7.1 Faster startup, caching and streaming
 ```
 
 ## Boundaries
@@ -236,8 +253,9 @@ The agent layer is intentionally constrained.
 
 <img src="assets/picklo-mark.svg" alt="Picklo" width="76">
 
-### Picklo V7
+### Picklo V7.1
 
 **Chat normally. Picklo routes the safe tools.**
 
 </div>
+
