@@ -1,0 +1,27 @@
+name: Picklo quality checks
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Validate JavaScript syntax
+        run: |
+          node --check app.js
+          node --check agent-router.js
+          node --check sw.js
+          node --check webllm-worker.js
+
+      - name: Run Picklo smoke checks
+        run: node tests/picklo-smoke.mjs
