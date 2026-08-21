@@ -3,15 +3,25 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <meta name="theme-color" content="#fbfaf8" />
-  <meta name="description" content="Picklo V7.2 — a faster, more accurate local-first AI assistant and KM Digital Labs product." />
-  <title>Picklo V7.2</title>
+  <meta name="theme-color" content="#fbfaf8" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#141714" media="(prefers-color-scheme: dark)" />
+  <meta name="description" content="Picklo V7.4 — a fast, capable and private local-first AI assistant." />
+  <meta name="application-name" content="Picklo" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-title" content="Picklo" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <title>Picklo V7.4</title>
   <link rel="preconnect" href="https://esm.run" crossorigin />
   <link rel="preconnect" href="https://huggingface.co" crossorigin />
   <link rel="modulepreload" href="https://esm.run/@mlc-ai/web-llm" />
   <link rel="icon" href="assets/picklo-mark.svg" type="image/svg+xml" />
+  <link rel="icon" href="assets/favicon-32.png" sizes="32x32" type="image/png" />
+  <link rel="apple-touch-icon" href="assets/apple-touch-icon.png" sizes="180x180" />
   <link rel="manifest" href="manifest.webmanifest" />
   <link rel="stylesheet" href="styles.css" />
+  <link rel="modulepreload" href="app.js" />
+  <link rel="modulepreload" href="agent-router.js" />
 </head>
 <body>
   <div class="app">
@@ -23,7 +33,6 @@
           <div>
             <strong>Picklo</strong>
             <span>Personal AI</span>
-            <small class="product-credit">A KM DIGITAL LABS PRODUCT</small>
           </div>
         </a>
 
@@ -96,10 +105,10 @@
           <div class="chat-heading">
             <div class="chat-title-line">
               <h1 id="headerChatTitle">New chat</h1>
-              <span class="version">V7.2</span>
+              <span class="version">V7.4</span>
             </div>
             <div class="chat-status">
-              <span id="assistantSubtitle">A KM Digital Labs AI product</span>
+              <span id="assistantSubtitle">Local, private and ready</span>
               <i>•</i>
               <strong id="modelStatus">Starting automatically…</strong>
               <i>•</i>
@@ -190,7 +199,6 @@
 
         <div class="composer-footer">
           <span id="composerNote">Agent tools, chats, memory and files stay in this browser.</span>
-          <span class="product-signature">A KM Digital Labs product</span>
           <span>Picklo can make mistakes. Check important information.</span>
         </div>
       </form>
@@ -232,11 +240,11 @@
       <div class="setting-group">
         <label class="field-label" for="performanceSelect">Performance</label>
         <select class="select-field" id="performanceSelect">
-          <option value="fast">Fast — quickest replies</option>
-          <option value="balanced">Balanced — better quality</option>
-          <option value="quality">Quality — strongest local mode</option>
+          <option value="fast">Fast — quickest capable model</option>
+          <option value="balanced">Balanced — recommended</option>
+          <option value="quality">Quality — strongest with answer verification</option>
         </select>
-        <p class="help-text">Fast uses the smallest compatible model and shorter context. Picklo starts it automatically in the background.</p>
+        <p class="help-text">Picklo starts loading immediately and keeps model files cached for faster home-screen launches. Quality mode uses more memory and verifies complex answers with a second pass.</p>
       </div>
 
       <div class="setting-group">
@@ -266,6 +274,11 @@
       </div>
 
       <button class="secondary-action full" id="dataBtn" type="button">Backup & restore Picklo</button>
+
+      <div class="copyright-card" aria-label="Copyright ownership">
+        <strong>Copyright</strong>
+        <p>© 2026 KM Digital Labs. All rights reserved. Picklo and its original interface and source code are owned by KM Digital Labs.</p>
+      </div>
     </div>
   </section>
 
@@ -310,7 +323,7 @@
   <section class="sheet tools-sheet hidden" id="toolsSheet" role="dialog" aria-modal="true" aria-labelledby="toolsTitle">
     <div class="sheet-handle"></div>
     <header class="sheet-header">
-      <div><span class="eyebrow">PICKLO V7.2</span><h2 id="toolsTitle">Tools</h2><p>Local utilities that work without a Picklo backend.</p></div>
+      <div><span class="eyebrow">PICKLO V7.4</span><h2 id="toolsTitle">Tools</h2><p>Local utilities that work without a Picklo backend.</p></div>
       <button class="sheet-close" data-close-sheet type="button">×</button>
     </header>
     <div class="sheet-body">
@@ -342,7 +355,7 @@
 
       <section class="tool-panel hidden" data-tool-panel="code">
         <div class="tool-panel-title"><div><strong>JavaScript sandbox</strong><span>Runs in an isolated sandboxed iframe.</span></div><button class="tool-run" id="codeRunBtn" type="button">Run</button></div>
-        <textarea class="code-runner-input" id="codeRunnerInput" spellcheck="false">console.log("Hello from Picklo V5");
+        <textarea class="code-runner-input" id="codeRunnerInput" spellcheck="false">console.log("Hello from Picklo V7.4");
 return 2 + 2;</textarea>
         <pre class="code-output" id="codeOutput">Ready.</pre>
       </section>
@@ -382,7 +395,7 @@ return 2 + 2;</textarea>
         </button>
         <label for="importDataInput">
           <strong>Import Picklo</strong>
-          <span>Restore a Picklo V4 JSON backup.</span>
+          <span>Restore a Picklo V7.4 JSON backup.</span>
           <input id="importDataInput" type="file" hidden accept=".json,application/json" />
         </label>
       </div>
