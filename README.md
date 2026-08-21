@@ -2,11 +2,9 @@
 
 <img src="assets/picklo-logo.svg" alt="Picklo" width="520">
 
-# Picklo V7.2
+# Picklo V7.4
 
-### A KM Digital Labs Product
-
-<img src="https://img.shields.io/badge/Release-V7.2.0-5F56C9?style=for-the-badge" alt="V7.2">
+<img src="https://img.shields.io/badge/Release-V7.4.0-5F56C9?style=for-the-badge" alt="V7.4">
 <img src="https://img.shields.io/badge/Agent-Private_Tools-2F8A5C?style=for-the-badge" alt="Private agent tools">
 <img src="https://img.shields.io/badge/Startup-Automatic-202020?style=for-the-badge" alt="Automatic startup">
 <img src="https://img.shields.io/badge/Inference-Web_Worker-5367E8?style=for-the-badge" alt="Web Worker">
@@ -20,6 +18,22 @@
 </div>
 
 ---
+
+## V7.4 intelligence, startup and PWA update
+
+Picklo V7.4 strengthens the local assistant while keeping the app responsive on ordinary devices.
+
+- **Earlier model warmup:** model hydration begins as soon as the application module starts, before local files and the rest of the interface finish initializing.
+- **Persistent model cache:** Picklo requests persistent browser storage and reuses WebLLM model files on later visits and home-screen launches.
+- **Stronger defaults:** Fast uses a capable 1B model, Balanced uses 1.7B, and Quality uses the strongest preferred 3B model.
+- **Quality verification:** complex answers in Quality mode receive a private second-pass review for missed requirements, contradictions, unsafe advice and incomplete code.
+- **Honest current information:** Picklo no longer invents live news, prices, citations, URLs or other changing facts it cannot verify.
+- **Better conversation context:** recent messages are selected using both message and character budgets, preserving useful continuity without uncontrolled prompt growth.
+- **Improved document retrieval:** local file passages are ranked with BM25-style term weighting, phrase bonuses, filename relevance and upload priority.
+- **Validated file generation:** invalid JSON, XML, SVG and unbalanced code artifacts can be repaired privately before the download card is returned.
+- **Real Word files:** Word requests now produce `.docx` Open XML documents instead of only Word-compatible HTML files.
+- **Home-screen identity:** Apple touch, 192px maskable and 512px maskable icons use the Picklo mascot when the PWA is installed.
+- **Calmer interface:** improved reading width, typography, focus states, reduced-motion support, mobile safe-area handling and a copyright notice confined to Settings.
 
 ## V7.2 answer-quality and privacy update
 
@@ -160,14 +174,15 @@ The choice is stored locally.
 
 ## Performance retained
 
-V7 keeps the V6.1 performance architecture:
+V7.4 keeps and strengthens the V6.1 performance architecture:
 
-- immediate model startup after first paint;
-- Fast / Balanced / Quality modes with leaner prompt budgets;
+- model warmup at the earliest safe startup point;
+- persistent browser caching for downloaded model files;
+- Fast / Balanced / Quality modes with larger quality budgets;
 - Web Worker inference;
 - batched streaming UI updates;
-- smart document retrieval;
-- stale-while-revalidate app-shell caching;
+- BM25-style document retrieval;
+- network-first navigation with cached offline fallback;
 - browser model caching;
 - tokens-per-second display when available.
 
@@ -183,9 +198,9 @@ Text         #1F1F1F
 ### Dark
 
 ```text
-Background   #171717
-Surface      #222222
-Text         #FFFFFF
+Background   #141714
+Surface      #20241F
+Text         #F6F6F2
 ```
 
 V7 keeps the flat, high-contrast V6 styling without neon effects.
@@ -205,13 +220,17 @@ When V7 has no existing local state, it checks for V6.1 data and imports support
 ## Project structure
 
 ```text
-picklo-v7.1/
+picklo-v7.4/
 ├── .github/
 │   └── workflows/
 │       └── deploy-pages.yml
 ├── assets/
 │   ├── picklo-logo.svg
 │   ├── picklo-mark.svg
+│   ├── apple-touch-icon.png
+│   ├── favicon-32.png
+│   ├── picklo-192.png
+│   ├── picklo-512.png
 │   └── picklo-v7-preview.png
 ├── agent-router.js
 ├── app.js
@@ -245,11 +264,13 @@ V7  Automatic safe tool routing
 V7.1 Faster startup, caching and streaming
  ↓
 V7.2 More accurate answers and private processing
+ ↓
+V7.4 Stronger reasoning, verified files and installable app icons
 ```
 
 ## Boundaries
 
-V7 does not silently give the AI unrestricted control of the browser or device.
+V7.4 does not silently give the AI unrestricted control of the browser or device.
 
 It does not automatically:
 
@@ -267,7 +288,7 @@ The agent layer is intentionally constrained.
 
 <img src="assets/picklo-mark.svg" alt="Picklo" width="76">
 
-### Picklo V7.2
+### Picklo V7.4
 
 **Chat normally. Picklo checks privately and returns the finished answer.**
 

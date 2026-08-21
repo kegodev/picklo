@@ -1,82 +1,91 @@
 import * as webllm from "https://esm.run/@mlc-ai/web-llm";
 import { classifyAgentIntent } from "./agent-router.js";
 
-const APP_VERSION = "7.2.0";
+const APP_VERSION = "7.4.0";
 const STORAGE_KEY = "picklo-v7-state";
 const V61_STORAGE_KEY = "picklo-v6.1-state";
 const FILE_DB = "picklo-v3-files";
 const FILE_STORE = "documents";
-const MAX_FILE_CHARS = 240000;
-const MAX_CONTEXT_CHARS = 7000;
+const MAX_FILE_CHARS = 400000;
+const MAX_CONTEXT_CHARS = 10000;
 
 const PREFERRED_MODELS = [
-  { id: "SmolLM2-360M-Instruct-q4f16_1-MLC", label: "SmolLM2 360M", note: "Instant" },
   { id: "Llama-3.2-1B-Instruct-q4f16_1-MLC", label: "Llama 3.2 1B", note: "Fast" },
   { id: "SmolLM2-1.7B-Instruct-q4f16_1-MLC", label: "SmolLM2 1.7B", note: "Balanced" },
-  { id: "Llama-3.2-3B-Instruct-q4f16_1-MLC", label: "Llama 3.2 3B", note: "Quality" }
+  { id: "Llama-3.2-3B-Instruct-q4f16_1-MLC", label: "Llama 3.2 3B", note: "Strongest" },
+  { id: "SmolLM2-360M-Instruct-q4f16_1-MLC", label: "SmolLM2 360M", note: "Low memory" }
 ];
 
 const PERFORMANCE_PROFILES = {
   fast: {
     label: "Fast",
-    preferredModel: "SmolLM2-360M-Instruct-q4f16_1-MLC",
-    recentMessages: 6,
-    contextChars: 1800,
-    maxTokens: 240,
-    temperature: 0.25
+    preferredModel: "Llama-3.2-1B-Instruct-q4f16_1-MLC",
+    recentMessages: 8,
+    contextChars: 2800,
+    maxTokens: 420,
+    temperature: 0.15,
+    topP: 0.85,
+    verify: false
   },
   balanced: {
     label: "Balanced",
-    preferredModel: "Llama-3.2-1B-Instruct-q4f16_1-MLC",
-    recentMessages: 10,
-    contextChars: 3600,
-    maxTokens: 480,
-    temperature: 0.35
+    preferredModel: "SmolLM2-1.7B-Instruct-q4f16_1-MLC",
+    recentMessages: 14,
+    contextChars: 5200,
+    maxTokens: 720,
+    temperature: 0.2,
+    topP: 0.88,
+    verify: false
   },
   quality: {
     label: "Quality",
-    preferredModel: "SmolLM2-1.7B-Instruct-q4f16_1-MLC",
-    recentMessages: 16,
-    contextChars: 6000,
-    maxTokens: 720,
-    temperature: 0.4
+    preferredModel: "Llama-3.2-3B-Instruct-q4f16_1-MLC",
+    recentMessages: 24,
+    contextChars: 9000,
+    maxTokens: 1200,
+    temperature: 0.18,
+    topP: 0.9,
+    verify: true
   }
 };
 
 const MODE_PROMPTS = {
-  general: "Be a strong general-purpose assistant. Adapt to the user's task rather than forcing a particular format.",
-  write: "Prioritize writing quality, structure, audience, tone, clarity and useful revision. Produce finished writing when the user asks for it.",
-  code: "Prioritize correct software reasoning. Explain tradeoffs, provide complete code when appropriate, and avoid inventing APIs or behavior.",
-  analyze: "Prioritize evidence, structure, comparisons, assumptions and careful reasoning. Use supplied file context when relevant."
+  general: "Act as a precise general-purpose assistant. Adapt depth and format to the request, preserve context, and lead with the useful answer.",
+  write: "Produce polished finished writing for the stated audience and purpose. Improve structure, specificity, tone, and clarity without adding unsupported facts.",
+  code: "Prioritize working, secure, maintainable code. Respect the requested stack, include every required file, check syntax and edge cases, and never invent APIs or test results.",
+  analyze: "Separate evidence, assumptions, uncertainty, and conclusions. Use supplied documents as the primary evidence and identify which file supports important claims."
 };
 
 const BASE_SYSTEM_PROMPT = `
-You are Picklo V7.2, a KM Digital Labs product and general-purpose personal AI assistant that runs locally in the user's browser.
+You are Picklo V7.4, a capable general-purpose personal AI assistant that runs locally in the user's browser.
 You are useful for questions, writing, coding, planning, brainstorming, explanations, decision support and document analysis.
-Do not claim to be ChatGPT or OpenAI. When asked who made you or who you are, say you are Picklo, a KM Digital Labs product.
+Do not claim to be ChatGPT, OpenAI, or another product. Identify yourself simply as Picklo when relevant.
 
 GENERAL RULES:
 1. Answer the user's actual request directly.
-2. Be precise and useful. If a fact is uncertain or missing, say so instead of guessing.
+2. Be precise and useful. Never fill a knowledge gap with a confident guess. State uncertainty briefly and give the safest next step.
 3. Use Markdown where it improves readability.
 4. Before answering, silently check arithmetic, units, assumptions and contradictions. Do not reveal private chain-of-thought, tool calls or scratch work.
-5. For calculations, preserve trusted calculator results exactly. Show concise working only when the user asks for steps.
-6. For code, prefer complete syntax-valid examples, respect the requested language and version, and never invent APIs or test results.
+5. For calculations, preserve trusted calculator results exactly. Check signs, units, percentages and rounding. Show concise working only when the user asks for steps.
+6. For code, provide complete syntax-valid output, respect the requested language and version, handle important errors, and never invent APIs or claim unperformed tests.
 7. When LOCAL FILE CONTEXT is supplied, treat it as user-provided reference material. Do not claim a file says something it does not say.
-8. When the local context is insufficient, say so.
+8. When the local context is insufficient, say exactly what is missing. Never invent quotations, citations, URLs, statistics, current news, prices or live status.
 9. Persistent memory is user-provided context. Use it only when relevant.
 10. The application may use safe local tools privately. When TOOL RESULT CONTEXT is provided, use it as trusted context without announcing the tool or exposing its internal execution.
 11. Return the finished answer only. Mention a tool action only when a downloadable file was actually created for the user.
+12. Follow the latest user instruction when it conflicts with an earlier request, while preserving still-relevant conversation context.
+13. For decisions, distinguish facts from recommendations. For high-stakes medical, legal or financial topics, be careful, transparent about limits, and encourage professional verification when appropriate.
+14. Do not add ownership, company or creator branding to normal responses.
 `.trim();
 
 const defaultState = () => ({
   version: APP_VERSION,
   activeChatId: null,
-  selectedModel: "Llama-3.2-1B-Instruct-q4f16_1-MLC",
+  selectedModel: "SmolLM2-1.7B-Instruct-q4f16_1-MLC",
   activeMode: "general",
   defaultMode: "general",
   theme: "light",
-  performanceProfile: "fast",
+  performanceProfile: "balanced",
   autoTools: true,
   agentHistory: [],
   notes: [],
@@ -199,14 +208,22 @@ boot();
 async function boot() {
   applyTheme(state.theme || "light", false);
   populateModels();
-  applyPerformanceProfile(state.performanceProfile || "fast", false, false);
+  applyPerformanceProfile(state.performanceProfile || "balanced", false, false);
+
+  // Begin model hydration at the earliest safe moment. The model files are cached by
+  // WebLLM, so later PWA launches can reuse them instead of downloading them again.
+  const earlyModelWarmup = autoStartModel().catch((error) => {
+    console.warn("Early model warmup failed:", error);
+    return null;
+  });
+
   ensureActiveChat();
   localFiles = await listLocalFiles();
   bindEvents();
 
   defaultModeSelect.value = state.defaultMode || "general";
   themeSelect.value = state.theme || "light";
-  performanceSelect.value = state.performanceProfile || "fast";
+  performanceSelect.value = state.performanceProfile || "balanced";
   autoToolsSelect.value = state.autoTools === false ? "off" : "on";
   renderAgentHistory();
 
@@ -218,15 +235,32 @@ async function boot() {
   setMode(state.activeMode || state.defaultMode || "general", false);
   renderAll();
 
-  if ("serviceWorker" in navigator) {
-    window.addEventListener("load", () => {
-      navigator.serviceWorker.register("./sw.js").catch(() => {});
-    });
-  }
+  registerPickloServiceWorker();
+  preserveLocalModelCache();
+  await Promise.resolve(earlyModelWarmup);
+}
 
-  // Start after the first painted frame instead of waiting for browser idle time.
-  const begin = () => autoStartModel().catch((error) => console.warn("Auto-start failed:", error));
-  requestAnimationFrame(() => setTimeout(begin, 0));
+function registerPickloServiceWorker() {
+  if (!("serviceWorker" in navigator)) return;
+
+  let refreshing = false;
+  navigator.serviceWorker.addEventListener("controllerchange", () => {
+    if (refreshing) return;
+    refreshing = true;
+    location.reload();
+  });
+
+  navigator.serviceWorker.register("./sw.js").then((registration) => {
+    registration.update().catch(() => {});
+  }).catch(() => {});
+}
+
+async function preserveLocalModelCache() {
+  try {
+    if (navigator.storage?.persist) await navigator.storage.persist();
+  } catch {
+    // Persistence is a browser preference; model caching still works without it.
+  }
 }
 
 function bindEvents() {
@@ -456,7 +490,7 @@ function loadState() {
     const v61 = localStorage.getItem(V61_STORAGE_KEY);
     if (v61) {
       const migrated = normalizeState(JSON.parse(v61));
-      if (!migrated.performanceProfile) migrated.performanceProfile = "fast";
+      if (!migrated.performanceProfile) migrated.performanceProfile = "balanced";
       if (typeof migrated.autoTools !== "boolean") migrated.autoTools = true;
       if (!Array.isArray(migrated.agentHistory)) migrated.agentHistory = [];
       migrated.version = APP_VERSION;
@@ -473,7 +507,7 @@ function normalizeState(parsed) {
   return {
     ...defaultState(),
     ...parsed,
-    performanceProfile: PERFORMANCE_PROFILES[parsed?.performanceProfile] ? parsed.performanceProfile : "fast",
+    performanceProfile: PERFORMANCE_PROFILES[parsed?.performanceProfile] ? parsed.performanceProfile : "balanced",
     autoTools: typeof parsed?.autoTools === "boolean" ? parsed.autoTools : true,
     agentHistory: Array.isArray(parsed?.agentHistory) ? parsed.agentHistory.slice(0, 20) : [],
     notes: Array.isArray(parsed?.notes) ? parsed.notes : [],
@@ -571,10 +605,10 @@ function setMode(mode, persist = true) {
   const label = mode.charAt(0).toUpperCase() + mode.slice(1);
   activeModeLabel.textContent = label;
   assistantSubtitle.textContent = {
-    general: "A KM Digital Labs AI product",
-    write: "KM Digital Labs • Writing and refinement",
-    code: "KM Digital Labs • Software reasoning",
-    analyze: "KM Digital Labs • Document analysis"
+    general: "Local, private and ready",
+    write: "Writing and refinement",
+    code: "Software reasoning",
+    analyze: "Document analysis"
   }[mode];
 
   if (persist) saveState();
@@ -911,12 +945,10 @@ function detectRequestedArtifact(input) {
 
   let extension = explicitName?.split(".").pop()?.toLowerCase() || inferArtifactExtension(text);
   if (extension === "htm") extension = "html";
-  if (extension === "docx") extension = "doc";
   if (!extension) extension = "txt";
 
   const format = getArtifactFormat(extension);
   let name = explicitName ? sanitizeArtifactName(explicitName) : defaultArtifactName(text, extension);
-  if (/\.docx$/i.test(name)) name = name.replace(/\.docx$/i, ".doc");
   if (!name.toLowerCase().endsWith(`.${extension}`)) name = `${name.replace(/\.[^.]+$/, "")}.${extension}`;
 
   return { name, extension, ...format };
@@ -924,7 +956,7 @@ function detectRequestedArtifact(input) {
 
 function inferArtifactExtension(text) {
   const formats = [
-    ["pdf", /\bpdf\b/i], ["doc", /\b(?:word|microsoft word|docx?|word document)\b/i],
+    ["pdf", /\bpdf\b/i], ["docx", /\b(?:word|microsoft word|docx?|word document)\b/i],
     ["html", /\b(?:html|webpage|website)\b/i], ["css", /\bcss\b/i],
     ["js", /\b(?:javascript|js file)\b/i], ["ts", /\b(?:typescript|ts file)\b/i],
     ["py", /\b(?:python|py file)\b/i], ["json", /\bjson\b/i], ["csv", /\bcsv\b/i],
@@ -936,7 +968,9 @@ function inferArtifactExtension(text) {
 
 function getArtifactFormat(extension) {
   const formats = {
-    pdf: ["PDF document", "application/pdf"], doc: ["Word document", "application/msword"],
+    pdf: ["PDF document", "application/pdf"],
+    docx: ["Word document", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"],
+    doc: ["Legacy Word document", "application/msword"],
     html: ["HTML", "text/html"], css: ["CSS", "text/css"], js: ["JavaScript", "text/javascript"],
     mjs: ["JavaScript module", "text/javascript"], cjs: ["JavaScript", "text/javascript"],
     ts: ["TypeScript", "text/typescript"], tsx: ["TypeScript React", "text/typescript"],
@@ -981,7 +1015,7 @@ function createArtifactDescriptor(request, reply) {
 function extractArtifactContent(reply, extension) {
   const source = String(reply || "").trim();
   const fences = [...source.matchAll(/```([^\n`]*)\n?([\s\S]*?)```/g)];
-  if (!fences.length || ["pdf", "doc", "txt", "md", "rtf"].includes(extension)) return source;
+  if (!fences.length || ["pdf", "doc", "docx", "txt", "md", "rtf"].includes(extension)) return source;
 
   const aliases = new Set([extension]);
   if (["js", "mjs", "cjs", "jsx"].includes(extension)) aliases.add("javascript");
@@ -994,6 +1028,7 @@ function extractArtifactContent(reply, extension) {
 async function downloadArtifact(artifact) {
   let blob;
   if (artifact.extension === "pdf") blob = buildSimplePdfBlob(artifact.content);
+  else if (artifact.extension === "docx") blob = await buildDocxBlob(artifact.content);
   else if (artifact.extension === "doc") blob = buildWordCompatibleBlob(artifact.content);
   else blob = new Blob([artifact.content || ""], { type: `${artifact.mime || "text/plain"};charset=utf-8` });
 
@@ -1010,6 +1045,54 @@ async function downloadArtifact(artifact) {
 function buildWordCompatibleBlob(content) {
   const html = `<!doctype html><html><head><meta charset="utf-8"><title>Picklo document</title></head><body><pre style="white-space:pre-wrap;font:11pt/1.5 Arial,sans-serif">${escapeHtmlText(content)}</pre></body></html>`;
   return new Blob([html], { type: "application/msword" });
+}
+
+async function buildDocxBlob(content) {
+  if (!window.JSZip) {
+    await loadExternalScript("https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js", "JSZip");
+  }
+
+  const zip = new window.JSZip();
+  const paragraphs = String(content || "")
+    .replace(/```[^\n]*\n?/g, "")
+    .replace(/```/g, "")
+    .split(/\r?\n/)
+    .map((line) => {
+      const clean = line
+        .replace(/^\s{0,3}#{1,6}\s+/, "")
+        .replace(/^\s*[-*+]\s+/, "• ")
+        .replace(/^\s*\d+\.\s+/, (match) => match.trim() + " ")
+        .replace(/[*_`]/g, "");
+      return `<w:p><w:r><w:t xml:space="preserve">${escapeXmlText(clean || " ")}</w:t></w:r></w:p>`;
+    })
+    .join("");
+
+  zip.file("[Content_Types].xml", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+  <Default Extension="xml" ContentType="application/xml"/>
+  <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
+  <Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/>
+  <Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/>
+</Types>`);
+  zip.folder("_rels").file(".rels", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>
+  <Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/>
+  <Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties" Target="docProps/app.xml"/>
+</Relationships>`);
+  zip.folder("word").file("document.xml", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>${paragraphs}<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440"/></w:sectPr></w:body></w:document>`);
+  zip.folder("word").folder("_rels").file("document.xml.rels", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"/>`);
+  zip.folder("docProps").file("core.xml", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><dc:title>Picklo document</dc:title><dc:creator>Picklo</dc:creator><dcterms:created xsi:type="dcterms:W3CDTF">${new Date().toISOString()}</dcterms:created></cp:coreProperties>`);
+  zip.folder("docProps").file("app.xml", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties"><Application>Picklo</Application></Properties>`);
+
+  return zip.generateAsync({
+    type: "blob",
+    mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    compression: "DEFLATE"
+  });
 }
 
 function buildSimplePdfBlob(content) {
@@ -1077,6 +1160,10 @@ function escapeHtmlText(text) {
   return String(text).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
+function escapeXmlText(text) {
+  return escapeHtmlText(text).replace(/'/g, "&apos;");
+}
+
 function renderStats() {
   memoryCount.textContent = `${state.memories.length} saved`;
   panelMemoryCount.textContent = `${state.memories.length} saved`;
@@ -1087,7 +1174,7 @@ function renderStats() {
 }
 
 function getPerformanceProfile() {
-  return PERFORMANCE_PROFILES[state.performanceProfile] || PERFORMANCE_PROFILES.fast;
+  return PERFORMANCE_PROFILES[state.performanceProfile] || PERFORMANCE_PROFILES.balanced;
 }
 
 function applyPerformanceProfile(profileName, persist = true, updateModel = true) {
@@ -1185,7 +1272,7 @@ async function loadSelectedModel(options = {}) {
     setRuntime("WebGPU unavailable", "Use a WebGPU-capable browser", "error");
     if (!automatic) {
       closeSheets();
-      addError("WebGPU is unavailable in this browser. Picklo V6.1 needs a WebGPU-capable browser for local inference.");
+      addError("WebGPU is unavailable in this browser. Picklo V7.4 needs a WebGPU-capable browser for local inference.");
     }
     return;
   }
@@ -1420,7 +1507,7 @@ async function sendMessage() {
     const stream = await engine.chat.completions.create({
       messages: buildModelMessages(chat, retrieved, route?.toolContext || "", requestedArtifact),
       temperature: profile.temperature,
-      top_p: 0.9,
+      top_p: profile.topP || 0.9,
       max_tokens: profile.maxTokens,
       stream: true,
       stream_options: { include_usage: true }
@@ -1446,6 +1533,12 @@ async function sendMessage() {
     }
 
     fullReply = cleanAssistantReply(fullReply);
+
+    if (!generationWasStopped && requestedArtifact) {
+      fullReply = await repairArtifactIfNeeded(content, requestedArtifact, fullReply, profile);
+    } else if (!generationWasStopped && profile.verify && shouldReviewAnswer(content)) {
+      fullReply = await reviewAnswer(content, fullReply, profile);
+    }
 
     const elapsedSeconds = Math.max((performance.now() - generationStartedAt) / 1000, 0.001);
     lastGenerationStats = {
@@ -1544,12 +1637,23 @@ function buildModelMessages(chat, retrieved, toolContext = "", requestedArtifact
     : "";
 
   const artifactContext = requestedArtifact
-    ? `FILE RETURN REQUEST:\nCreate the complete contents for ${requestedArtifact.name}. Return the finished content only. For code files, use one complete fenced code block in the correct language. Do not describe tool usage or omit required sections.`
+    ? `FILE RETURN REQUEST:\nCreate the complete contents for ${requestedArtifact.name}. Return the finished content only. For code files, use one complete fenced code block in the correct language. For JSON, XML, YAML and CSV, return valid parseable data. Do not describe tool usage or omit required sections.`
     : "";
+
+  const latestUserInput = [...chat.messages].reverse().find((message) => message.role === "user" && message.content)?.content || "";
+  const responseContract = buildResponseContract(latestUserInput, retrieved, requestedArtifact);
+  const localDate = new Intl.DateTimeFormat(undefined, {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+    timeZoneName: "short"
+  }).format(new Date());
 
   const system = [
     BASE_SYSTEM_PROMPT,
+    `DEVICE DATE:\n${localDate}. Treat facts that may have changed after your training data as unverified unless the user supplied current evidence.`,
     `CURRENT MODE:\n${MODE_PROMPTS[state.activeMode] || MODE_PROMPTS.general}`,
+    responseContract,
     memoryBlock,
     localContext,
     toolContext ? `TOOL RESULT CONTEXT:\n${toolContext}` : "",
@@ -1558,14 +1662,135 @@ function buildModelMessages(chat, retrieved, toolContext = "", requestedArtifact
 
   return [
     { role: "system", content: system },
-    ...chat.messages
-      .slice(-getPerformanceProfile().recentMessages)
-      .filter((message) => String(message.modelContent || message.content || "").trim())
-      .map((message) => ({
-        role: message.role,
-        content: message.modelContent || message.content
-      }))
+    ...selectConversationMessages(chat, getPerformanceProfile())
   ];
+}
+
+function buildResponseContract(input, retrieved, requestedArtifact) {
+  const text = String(input || "");
+  const rules = ["RESPONSE CONTRACT:", "- Answer the current request directly and return only the final response."];
+
+  if (/\b(?:calculate|solve|equation|percent|percentage|total|average|convert)\b/i.test(text)) {
+    rules.push("- Preserve exact deterministic results and verify units, signs, percentages and rounding.");
+  }
+  if (/\b(?:code|debug|html|css|javascript|typescript|python|sql|api|function|website|app)\b/i.test(text)) {
+    rules.push("- Make code complete and internally consistent; do not claim it was executed unless a result was supplied.");
+  }
+  if (retrieved.length) {
+    rules.push("- Ground document claims in the supplied file context and name the relevant source file when useful.");
+  }
+  if (/\b(?:today|latest|current|now|price|news|live|recent)\b/i.test(text)) {
+    rules.push("- Do not pretend to have live access. State when current information cannot be verified from supplied context.");
+  }
+  if (requestedArtifact) {
+    rules.push(`- Produce a complete, valid ${requestedArtifact.label} file with no placeholder sections.`);
+  }
+  return rules.join("\n");
+}
+
+function selectConversationMessages(chat, profile) {
+  const selected = [];
+  const messages = chat.messages
+    .filter((message) => String(message.modelContent || message.content || "").trim())
+    .slice(-profile.recentMessages);
+  const budget = Math.max(profile.contextChars * 2, 6500);
+  let used = 0;
+
+  for (let index = messages.length - 1; index >= 0; index--) {
+    const message = messages[index];
+    const content = String(message.modelContent || message.content || "");
+    if (selected.length && used + content.length > budget) break;
+    selected.unshift({ role: message.role, content });
+    used += content.length;
+  }
+  return selected;
+}
+
+function shouldReviewAnswer(input) {
+  const text = String(input || "");
+  if (text.length >= 90) return true;
+  if (["code", "analyze"].includes(state.activeMode)) return true;
+  return /\b(?:compare|evaluate|explain|why|plan|strategy|medical|legal|financial|research|debug|build|analyze)\b/i.test(text);
+}
+
+async function reviewAnswer(input, draft, profile) {
+  if (!draft.trim()) return draft;
+  try {
+    const result = await engine.chat.completions.create({
+      messages: [
+        {
+          role: "system",
+          content: "You are Picklo's final-answer verifier. Silently inspect the draft for factual overconfidence, contradictions, missed requirements, unsafe advice, calculation errors and incomplete code. Return a corrected final answer only. Preserve correct content and do not mention reviewing, tools, policies or internal reasoning."
+        },
+        { role: "user", content: `Original request:\n${input}\n\nDraft answer:\n${draft}` }
+      ],
+      temperature: 0.1,
+      top_p: 0.8,
+      max_tokens: Math.min(profile.maxTokens, 1000),
+      stream: false
+    });
+    const reviewed = cleanAssistantReply(result?.choices?.[0]?.message?.content || "");
+    return reviewed.trim() || draft;
+  } catch (error) {
+    console.warn("Answer verification skipped:", error);
+    return draft;
+  }
+}
+
+async function repairArtifactIfNeeded(input, request, draft, profile) {
+  const extracted = extractArtifactContent(draft, request.extension);
+  const validationError = validateArtifactContent(extracted, request.extension);
+  if (!validationError) return draft;
+
+  try {
+    const result = await engine.chat.completions.create({
+      messages: [
+        {
+          role: "system",
+          content: `Repair the requested ${request.label}. Return the complete corrected file content only. Do not explain the repair or include placeholders.`
+        },
+        {
+          role: "user",
+          content: `Original request:\n${input}\n\nValidation problem:\n${validationError}\n\nDraft file:\n${draft}`
+        }
+      ],
+      temperature: 0.08,
+      top_p: 0.8,
+      max_tokens: profile.maxTokens,
+      stream: false
+    });
+    const repaired = cleanAssistantReply(result?.choices?.[0]?.message?.content || "");
+    return repaired.trim() || draft;
+  } catch (error) {
+    console.warn("Artifact repair skipped:", error);
+    return draft;
+  }
+}
+
+function validateArtifactContent(content, extension) {
+  const text = String(content || "").trim();
+  if (!text) return "The generated file is empty.";
+
+  try {
+    if (extension === "json") JSON.parse(text);
+    if (extension === "html" && !/<(?:!doctype\s+html|html)\b/i.test(text)) return "The HTML document is missing its document root.";
+    if (extension === "svg") {
+      const documentNode = new DOMParser().parseFromString(text, "image/svg+xml");
+      if (documentNode.querySelector("parsererror")) return "The SVG contains invalid XML.";
+    }
+    if (extension === "xml") {
+      const documentNode = new DOMParser().parseFromString(text, "application/xml");
+      if (documentNode.querySelector("parsererror")) return "The XML is not well formed.";
+    }
+    if (["css", "js", "ts", "jsx", "tsx", "java", "c", "cpp", "cs", "php", "go", "rs"].includes(extension)) {
+      const opens = (text.match(/{/g) || []).length;
+      const closes = (text.match(/}/g) || []).length;
+      if (opens !== closes) return "The file has unbalanced braces.";
+    }
+  } catch (error) {
+    return error?.message || "The generated file is not valid.";
+  }
+  return "";
 }
 
 function makeTitle(text) {
@@ -1728,17 +1953,35 @@ async function extractFileText(file) {
     return extractPdfText(file);
   }
   if (lower.endsWith(".docx")) return extractDocxText(file);
-  if (lower.endsWith(".doc")) throw new Error("Older .doc files are not supported yet. Save it as .docx or PDF first.");
+  if (lower.endsWith(".doc")) return extractLegacyDocText(file);
   if (lower.endsWith(".rtf")) return extractRtfText(await file.text());
   return file.text();
 }
 
 async function extractDocxText(file) {
   if (!window.mammoth) {
-    await loadExternalScript("https://cdn.jsdelivr.net/npm/mammoth@1.9.1/mammoth.browser.min.js");
+    await loadExternalScript("https://cdn.jsdelivr.net/npm/mammoth@1.9.1/mammoth.browser.min.js", "mammoth");
   }
   const result = await window.mammoth.extractRawText({ arrayBuffer: await file.arrayBuffer() });
   return result.value || "";
+}
+
+async function extractLegacyDocText(file) {
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  const isBinaryWord = bytes.length >= 8 && [0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1]
+    .every((value, index) => bytes[index] === value);
+
+  if (isBinaryWord) {
+    throw new Error("This older binary .doc format cannot be read safely in the browser. Open it in Word and save it as .docx or PDF.");
+  }
+
+  const source = new TextDecoder("utf-8", { fatal: false }).decode(bytes);
+  if (/^\s*{\\rtf/i.test(source)) return extractRtfText(source);
+  if (/<(?:html|body|p|div|table)\b/i.test(source)) {
+    const parsed = new DOMParser().parseFromString(source, "text/html");
+    return parsed.body?.innerText || parsed.body?.textContent || "";
+  }
+  return source;
 }
 
 function extractRtfText(source) {
@@ -1750,11 +1993,11 @@ function extractRtfText(source) {
     .replace(/\n{3,}/g, "\n\n");
 }
 
-function loadExternalScript(src) {
+function loadExternalScript(src, globalName = "") {
   return new Promise((resolve, reject) => {
     const existing = document.querySelector(`script[src="${src}"]`);
     if (existing) {
-      if (window.mammoth) resolve();
+      if (!globalName || window[globalName]) resolve();
       else existing.addEventListener("load", resolve, { once: true });
       return;
     }
@@ -1898,30 +2141,56 @@ function shouldUseLocalFiles(text) {
 async function retrieveLocalContext(query, preferredFileIds = []) {
   if (!localFiles.length) return [];
 
-  const tokens = tokenSet(query);
+  const tokens = [...tokenSet(query)];
   const preferred = new Set(preferredFileIds || []);
-  if (!tokens.size && !preferred.size) return [];
+  if (!tokens.length && !preferred.size) return [];
+
+  const allChunks = [];
+  for (const file of localFiles) {
+    chunkText(file.text).forEach((text, index) => {
+      const terms = String(text).toLowerCase().match(/[a-z0-9][a-z0-9_-]{2,}/g) || [];
+      allChunks.push({ file, text, index, terms, unique: new Set(terms) });
+    });
+  }
+
+  const documentFrequency = new Map();
+  for (const token of tokens) {
+    documentFrequency.set(token, allChunks.reduce((count, chunk) => count + (chunk.unique.has(token) ? 1 : 0), 0));
+  }
+
+  const averageLength = allChunks.reduce((sum, chunk) => sum + chunk.terms.length, 0) / Math.max(allChunks.length, 1);
+  const queryPhrase = tokens.slice(0, 5).join(" ");
 
   const scored = [];
 
-  for (const file of localFiles) {
-    const isPreferred = preferred.has(file.id);
-    const chunks = chunkText(file.text);
-    chunks.forEach((chunk, index) => {
-      const lower = chunk.toLowerCase();
-      let score = isPreferred ? 8 - Math.min(index, 4) : 0;
+  for (const chunk of allChunks) {
+    const isPreferred = preferred.has(chunk.file.id);
+    const counts = new Map();
+    for (const term of chunk.terms) counts.set(term, (counts.get(term) || 0) + 1);
+    let score = isPreferred ? 9 - Math.min(chunk.index, 5) : 0;
 
-      for (const token of tokens) {
-        if (token.length < 3) continue;
-        const hits = lower.split(token).length - 1;
-        score += Math.min(hits, 5) * (token.length >= 7 ? 2.2 : 1);
-        if (file.name.toLowerCase().includes(token)) score += 2.5;
-      }
+    for (const token of tokens) {
+      const frequency = counts.get(token) || 0;
+      const df = documentFrequency.get(token) || 0;
+      const idf = Math.log(1 + (allChunks.length - df + 0.5) / (df + 0.5));
+      const normalized = frequency
+        ? (frequency * 2.2) / (frequency + 1.2 * (0.25 + 0.75 * (chunk.terms.length / Math.max(averageLength, 1))))
+        : 0;
+      score += idf * normalized * (token.length >= 7 ? 1.35 : 1);
+      if (chunk.file.name.toLowerCase().includes(token)) score += 3;
+    }
 
-      if (score > 0) {
-        scored.push({ id: file.id, name: file.name, text: chunk, score, index });
-      }
-    });
+    if (queryPhrase.length >= 7 && chunk.text.toLowerCase().includes(queryPhrase)) score += 7;
+
+    if (score > 0) {
+      scored.push({
+        id: chunk.file.id,
+        name: chunk.file.name,
+        text: chunk.text,
+        score,
+        index: chunk.index
+      });
+    }
   }
 
   scored.sort((a, b) => b.score - a.score);
@@ -1930,7 +2199,7 @@ async function retrieveLocalContext(query, preferredFileIds = []) {
   let chars = 0;
 
   for (const item of scored) {
-    if (chosen.length >= 5) break;
+    if (chosen.length >= 7) break;
     const contextLimit = Math.min(MAX_CONTEXT_CHARS, getPerformanceProfile().contextChars);
     if (chars + item.text.length > contextLimit && chosen.length) continue;
     chosen.push(item);
@@ -1987,6 +2256,7 @@ function cleanAssistantReply(reply) {
   return String(reply || "")
     .replace(/<think>[\s\S]*?<\/think>/gi, "")
     .replace(/<analysis>[\s\S]*?<\/analysis>/gi, "")
+    .replace(/<reasoning>[\s\S]*?<\/reasoning>/gi, "")
     .replace(/^\s*\[(?:tool|calculator|code sandbox|internal)\][^\n]*\n?/gim, "")
     .trim();
 }
@@ -2289,7 +2559,7 @@ async function exportData() {
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
-  link.download = `picklo-v7-backup-${new Date().toISOString().slice(0, 10)}.json`;
+  link.download = `picklo-v7.4-backup-${new Date().toISOString().slice(0, 10)}.json`;
   document.body.appendChild(link);
   link.click();
   link.remove();

@@ -1,10 +1,17 @@
 {
-  "name": "Picklo V7.2",
+  "name": "Picklo",
   "short_name": "Picklo",
-  "description": "Picklo V7.2 \u2014 a faster, more accurate local-first AI and KM Digital Labs product.",
+  "description": "Picklo V7.4 \u2014 a fast, capable and private local-first AI assistant.",
+  "id": "./",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
+  "orientation": "any",
+  "lang": "en",
+  "dir": "ltr",
+  "categories": ["productivity", "utilities", "education"],
+  "prefer_related_applications": false,
   "background_color": "#ffffff",
   "theme_color": "#ffffff",
   "icons": [
@@ -13,6 +20,18 @@
       "sizes": "any",
       "type": "image/svg+xml",
       "purpose": "any"
+    },
+    {
+      "src": "assets/picklo-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "assets/picklo-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
     }
   ]
 }

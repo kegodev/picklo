@@ -366,7 +366,139 @@ body {
 }
 
 /* =========================================================
-   Picklo V7.2 — document cards, KM Digital Labs identity,
+   Picklo V7.4 — calmer, clearer conversation experience
+   ========================================================= */
+
+html {
+  color-scheme: light;
+  overscroll-behavior: none;
+}
+
+html[data-theme="dark"] {
+  color-scheme: dark;
+}
+
+body {
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+:where(button, input, textarea, select, a):focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--purple) 44%, transparent);
+  outline-offset: 2px;
+}
+
+.product-credit,
+.product-signature {
+  display: none !important;
+}
+
+.message-wrap {
+  width: min(100%, 760px);
+}
+
+.message-bubble {
+  font-size: clamp(14px, 1.2vw, 16px);
+  line-height: 1.68;
+}
+
+.message-bubble :where(p, ul, ol, pre, blockquote) {
+  margin-block: .7em;
+}
+
+.message-bubble pre,
+.code-output,
+.code-runner-input {
+  tab-size: 2;
+  scrollbar-width: thin;
+}
+
+.composer-box {
+  box-shadow: 0 10px 34px rgba(26, 31, 27, .08);
+}
+
+.composer-footer {
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.copyright-card {
+  margin-top: 14px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface-3);
+  padding: 13px 14px;
+}
+
+.copyright-card strong {
+  display: block;
+  color: var(--navy);
+  font-size: 13px;
+}
+
+.copyright-card p {
+  margin: 5px 0 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+html[data-theme="dark"] .copyright-card {
+  border-color: #363b35;
+  background: #20241f;
+}
+
+html[data-theme="dark"] .copyright-card strong {
+  color: #f6f6f2;
+}
+
+html[data-theme="dark"] .copyright-card p {
+  color: #b9beb5;
+}
+
+html[data-theme="dark"] .composer-box {
+  box-shadow: 0 12px 34px rgba(0, 0, 0, .28);
+}
+
+@media (max-width: 820px) {
+  .chat-shell {
+    padding-top: env(safe-area-inset-top, 0);
+  }
+
+  .composer {
+    padding-bottom: max(8px, env(safe-area-inset-bottom, 0px));
+  }
+
+  .composer-footer {
+    justify-content: center;
+  }
+
+  .message-bubble {
+    font-size: 14px;
+    line-height: 1.62;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+  }
+}
+
+/* =========================================================
+   Picklo V7.4 — document cards, product identity,
    and a natural charcoal dark theme
    ========================================================= */
 
@@ -1802,5 +1934,72 @@ html[data-theme="dark"] .agent-history-row strong {
   .agent-activity {
     width: calc(100% - 20px);
     font-size: 11px;
+  }
+}
+
+/* Final V7.4 cascade safeguards */
+.product-credit,
+.product-signature {
+  display: none !important;
+}
+
+.message-wrap {
+  width: min(100%, 760px);
+}
+
+.message-bubble {
+  font-size: clamp(14px, 1.2vw, 16px);
+  line-height: 1.68;
+}
+
+.copyright-card {
+  margin-top: 14px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface-3);
+  padding: 13px 14px;
+}
+
+.copyright-card strong {
+  display: block;
+  color: var(--navy);
+  font-size: 13px;
+}
+
+.copyright-card p {
+  margin: 5px 0 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+html[data-theme="dark"] .copyright-card {
+  border-color: #363b35 !important;
+  background: #20241f !important;
+}
+
+html[data-theme="dark"] .copyright-card strong {
+  color: #f6f6f2 !important;
+}
+
+html[data-theme="dark"] .copyright-card p {
+  color: #b9beb5 !important;
+}
+
+@media (max-width: 820px) {
+  .message-bubble {
+    font-size: 14px;
+    line-height: 1.62;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
   }
 }

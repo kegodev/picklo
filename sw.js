@@ -1,4 +1,4 @@
-const CACHE = "picklo-v7-shell-v3";
+const CACHE = "picklo-v7.4-shell-v1";
 const SHELL = [
   "./",
   "./index.html",
@@ -8,7 +8,11 @@ const SHELL = [
   "./webllm-worker.js",
   "./manifest.webmanifest",
   "./assets/picklo-mark.svg",
-  "./assets/picklo-logo.svg"
+  "./assets/picklo-logo.svg",
+  "./assets/apple-touch-icon.png",
+  "./assets/picklo-192.png",
+  "./assets/picklo-512.png",
+  "./assets/favicon-32.png"
 ];
 
 self.addEventListener("install", (event) => {
@@ -31,19 +35,25 @@ self.addEventListener("fetch", (event) => {
   const url = new URL(event.request.url);
   if (url.origin !== self.location.origin) return;
 
-  event.respondWith(
-    caches.match(event.request).then((cached) => {
-      const network = fetch(event.request)
+  if (event.request.mode === "navigate") {
+    event.respondWith(
+      fetch(event.request)
         .then((response) => {
-          if (response.ok) {
-            const copy = response.clone();
-            caches.open(CACHE).then((cache) => cache.put(event.request, copy));
-          }
+          if (response.ok) caches.open(CACHE).then((cache) => cache.put("./index.html", response.clone()));
           return response;
         })
-        .catch(() => cached);
+        .catch(() => caches.match("./index.html"))
+    );
+    return;
+  }
 
-      return cached || network;
+  event.respondWith(
+    caches.match(event.request).then((cached) => {
+      const refreshed = fetch(event.request).then((response) => {
+        if (response.ok) caches.open(CACHE).then((cache) => cache.put(event.request, response.clone()));
+        return response;
+      }).catch(() => cached);
+      return cached || refreshed;
     })
   );
 });
