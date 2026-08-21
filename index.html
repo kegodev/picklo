@@ -4,8 +4,8 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <meta name="theme-color" content="#fbfaf8" />
-  <meta name="description" content="Picklo V7.1 — a faster local-first general AI assistant with safe tool routing." />
-  <title>Picklo V7.1</title>
+  <meta name="description" content="Picklo V7.2 — a faster, more accurate local-first AI assistant and KM Digital Labs product." />
+  <title>Picklo V7.2</title>
   <link rel="preconnect" href="https://esm.run" crossorigin />
   <link rel="preconnect" href="https://huggingface.co" crossorigin />
   <link rel="modulepreload" href="https://esm.run/@mlc-ai/web-llm" />
@@ -23,6 +23,7 @@
           <div>
             <strong>Picklo</strong>
             <span>Personal AI</span>
+            <small class="product-credit">A KM DIGITAL LABS PRODUCT</small>
           </div>
         </a>
 
@@ -95,10 +96,10 @@
           <div class="chat-heading">
             <div class="chat-title-line">
               <h1 id="headerChatTitle">New chat</h1>
-              <span class="version">V7.1</span>
+              <span class="version">V7.2</span>
             </div>
             <div class="chat-status">
-              <span id="assistantSubtitle">Your general-purpose personal AI</span>
+              <span id="assistantSubtitle">A KM Digital Labs AI product</span>
               <i>•</i>
               <strong id="modelStatus">Starting automatically…</strong>
               <i>•</i>
@@ -171,7 +172,7 @@
         <div class="composer-box">
           <label class="attach" for="fileInput" title="Attach local files">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 12 6.6-6.6a3 3 0 1 1 4.2 4.2l-9.2 9.2a5 5 0 0 1-7.1-7.1l9-9"/></svg>
-            <input id="fileInput" type="file" multiple hidden accept=".pdf,.txt,.md,.markdown,.csv,.json,.html,.css,.js,.ts,.jsx,.tsx,.py,.xml,.yaml,.yml,text/*,application/json,application/pdf" />
+            <input id="fileInput" type="file" multiple hidden accept=".pdf,.doc,.docx,.rtf,.txt,.md,.markdown,.csv,.tsv,.json,.html,.css,.js,.mjs,.ts,.jsx,.tsx,.py,.xml,.yaml,.yml,.toml,.ini,.sql,.java,.c,.cpp,.h,.hpp,.cs,.php,.rb,.go,.rs,.swift,.kt,.sh,.svg,.tex,text/*,application/json,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" />
           </label>
 
           <button class="composer-tool-button" id="composerToolsBtn" type="button" title="Picklo tools" aria-label="Open Picklo tools">
@@ -189,6 +190,7 @@
 
         <div class="composer-footer">
           <span id="composerNote">Agent tools, chats, memory and files stay in this browser.</span>
+          <span class="product-signature">A KM Digital Labs product</span>
           <span>Picklo can make mistakes. Check important information.</span>
         </div>
       </form>
@@ -224,7 +226,7 @@
           <option value="on">On — use safe local tools automatically</option>
           <option value="off">Off — chat only</option>
         </select>
-        <p class="help-text">When enabled, Picklo can route calculations, date/time, notes, memory and local-file requests to built-in tools before using the language model.</p>
+        <p class="help-text">When enabled, Picklo privately verifies calculations and handles safe local tasks. Processing stays hidden unless a downloadable file is returned.</p>
       </div>
 
       <div class="setting-group">
@@ -301,25 +303,25 @@
     <div class="sheet-body">
       <label class="primary-action upload-action" for="fileInput">Add files</label>
       <div class="file-list" id="sheetFileList"></div>
-      <p class="help-text">PDF and common text/code formats are supported. Image-only scanned PDFs are not OCR'd in V4.</p>
+      <p class="help-text">PDF, Word (.docx), rich text, and common text/code formats are supported. Image-only scanned PDFs are not OCR'd yet.</p>
     </div>
   </section>
 
   <section class="sheet tools-sheet hidden" id="toolsSheet" role="dialog" aria-modal="true" aria-labelledby="toolsTitle">
     <div class="sheet-handle"></div>
     <header class="sheet-header">
-      <div><span class="eyebrow">PICKLO V7.1</span><h2 id="toolsTitle">Tools</h2><p>Local utilities that work without a Picklo backend.</p></div>
+      <div><span class="eyebrow">PICKLO V7.2</span><h2 id="toolsTitle">Tools</h2><p>Local utilities that work without a Picklo backend.</p></div>
       <button class="sheet-close" data-close-sheet type="button">×</button>
     </header>
     <div class="sheet-body">
       <div class="agent-card">
         <div class="agent-card-head">
           <div>
-            <span class="agent-card-label">AUTO TOOLS</span>
-            <strong id="agentCardStatus">Agent routing is on</strong>
-            <small>Safe local tasks can run before the language model.</small>
+            <span class="agent-card-label">PRIVATE PROCESSING</span>
+            <strong id="agentCardStatus">Private processing is on</strong>
+            <small>Calculations and code stay behind the finished answer. Returned files remain visible.</small>
           </div>
-          <span class="agent-card-badge" id="agentToolCount">0 calls</span>
+          <span class="agent-card-badge" id="agentToolCount">0 files</span>
         </div>
         <div class="agent-history" id="agentHistoryList"></div>
       </div>
