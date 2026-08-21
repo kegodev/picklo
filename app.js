@@ -1,14 +1,13 @@
 import * as webllm from "https://esm.run/@mlc-ai/web-llm";
 import { classifyAgentIntent } from "./agent-router.js";
 
-const APP_VERSION = "7.1.0";
+const APP_VERSION = "7.2.0";
 const STORAGE_KEY = "picklo-v7-state";
 const V61_STORAGE_KEY = "picklo-v6.1-state";
 const FILE_DB = "picklo-v3-files";
 const FILE_STORE = "documents";
 const MAX_FILE_CHARS = 240000;
 const MAX_CONTEXT_CHARS = 7000;
-const STREAM_RENDER_INTERVAL_MS = 40;
 
 const PREFERRED_MODELS = [
   { id: "SmolLM2-360M-Instruct-q4f16_1-MLC", label: "SmolLM2 360M", note: "Instant" },
@@ -24,7 +23,7 @@ const PERFORMANCE_PROFILES = {
     recentMessages: 6,
     contextChars: 1800,
     maxTokens: 240,
-    temperature: 0.6
+    temperature: 0.25
   },
   balanced: {
     label: "Balanced",
@@ -32,7 +31,7 @@ const PERFORMANCE_PROFILES = {
     recentMessages: 10,
     contextChars: 3600,
     maxTokens: 480,
-    temperature: 0.68
+    temperature: 0.35
   },
   quality: {
     label: "Quality",
@@ -40,7 +39,7 @@ const PERFORMANCE_PROFILES = {
     recentMessages: 16,
     contextChars: 6000,
     maxTokens: 720,
-    temperature: 0.72
+    temperature: 0.4
   }
 };
 
@@ -52,20 +51,22 @@ const MODE_PROMPTS = {
 };
 
 const BASE_SYSTEM_PROMPT = `
-You are Picklo V7, a general-purpose personal AI assistant that runs locally in the user's browser.
+You are Picklo V7.2, a KM Digital Labs product and general-purpose personal AI assistant that runs locally in the user's browser.
 You are useful for questions, writing, coding, planning, brainstorming, explanations, decision support and document analysis.
-Do not claim to be ChatGPT or OpenAI. When asked who you are, say you are Picklo.
+Do not claim to be ChatGPT or OpenAI. When asked who made you or who you are, say you are Picklo, a KM Digital Labs product.
 
 GENERAL RULES:
 1. Answer the user's actual request directly.
-2. Be precise and useful. State uncertainty instead of inventing facts.
+2. Be precise and useful. If a fact is uncertain or missing, say so instead of guessing.
 3. Use Markdown where it improves readability.
-4. For calculations and technical reasoning, show important steps and units when relevant.
-5. For code, prefer complete working examples and explain non-obvious decisions.
-6. When LOCAL FILE CONTEXT is supplied, treat it as user-provided reference material. Do not claim a file says something it does not say.
-7. When the local context is insufficient, say so.
-8. Persistent memory is user-provided context. Use it only when relevant.
-9. The Picklo application may execute safe local tools before you answer. When TOOL RESULT CONTEXT is provided, use that result as trusted application context and do not pretend you computed or retrieved it yourself.
+4. Before answering, silently check arithmetic, units, assumptions and contradictions. Do not reveal private chain-of-thought, tool calls or scratch work.
+5. For calculations, preserve trusted calculator results exactly. Show concise working only when the user asks for steps.
+6. For code, prefer complete syntax-valid examples, respect the requested language and version, and never invent APIs or test results.
+7. When LOCAL FILE CONTEXT is supplied, treat it as user-provided reference material. Do not claim a file says something it does not say.
+8. When the local context is insufficient, say so.
+9. Persistent memory is user-provided context. Use it only when relevant.
+10. The application may use safe local tools privately. When TOOL RESULT CONTEXT is provided, use it as trusted context without announcing the tool or exposing its internal execution.
+11. Return the finished answer only. Mention a tool action only when a downloadable file was actually created for the user.
 `.trim();
 
 const defaultState = () => ({
@@ -570,10 +571,10 @@ function setMode(mode, persist = true) {
   const label = mode.charAt(0).toUpperCase() + mode.slice(1);
   activeModeLabel.textContent = label;
   assistantSubtitle.textContent = {
-    general: "Your general-purpose personal AI",
-    write: "Writing, drafting and refinement",
-    code: "Building, debugging and software reasoning",
-    analyze: "Documents, comparisons and structured reasoning"
+    general: "A KM Digital Labs AI product",
+    write: "KM Digital Labs • Writing and refinement",
+    code: "KM Digital Labs • Software reasoning",
+    analyze: "KM Digital Labs • Document analysis"
   }[mode];
 
   if (persist) saveState();
@@ -723,6 +724,9 @@ function renderMessages() {
       time: message.createdAt,
       sources: message.sources || [],
       tool: message.tool || "",
+      attachments: message.attachments || [],
+      artifact: message.artifact || null,
+      fileArtifact: Boolean(message.artifact),
       scroll: false
     });
   }
@@ -754,7 +758,15 @@ function appendMessageToDOM(role, content, options = {}) {
   bubble.className = "message-bubble";
 
   if (role === "assistant") renderMarkdownInto(bubble, content);
-  else bubble.textContent = content;
+  else if (content) bubble.textContent = content;
+
+  if (options.attachments?.length) {
+    renderAttachmentCards(bubble, options.attachments);
+  }
+
+  if (options.artifact) {
+    renderArtifactCard(bubble, options.artifact);
+  }
 
   if (options.sources?.length) {
     const sources = document.createElement("div");
@@ -768,7 +780,7 @@ function appendMessageToDOM(role, content, options = {}) {
     bubble.appendChild(sources);
   }
 
-  if (options.tool) {
+  if (options.tool && shouldExposeToolActivity(options.tool, options)) {
     const usedTool = document.createElement("span");
     usedTool.className = "tool-used";
     usedTool.textContent = `Used ${options.tool}`;
@@ -784,16 +796,18 @@ function appendMessageToDOM(role, content, options = {}) {
 
   const actions = document.createElement("div");
   actions.className = "message-actions";
-  const copyAction = document.createElement("button");
-  copyAction.type = "button";
-  copyAction.className = "message-action";
-  copyAction.textContent = "Copy";
-  copyAction.addEventListener("click", async () => {
-    try { await navigator.clipboard.writeText(content); copyAction.textContent = "Copied"; }
-    catch { copyAction.textContent = "Unavailable"; }
-    setTimeout(() => (copyAction.textContent = "Copy"), 1000);
-  });
-  actions.appendChild(copyAction);
+  if (String(content || "").trim()) {
+    const copyAction = document.createElement("button");
+    copyAction.type = "button";
+    copyAction.className = "message-action";
+    copyAction.textContent = "Copy";
+    copyAction.addEventListener("click", async () => {
+      try { await navigator.clipboard.writeText(content); copyAction.textContent = "Copied"; }
+      catch { copyAction.textContent = "Unavailable"; }
+      setTimeout(() => (copyAction.textContent = "Copy"), 1000);
+    });
+    actions.appendChild(copyAction);
+  }
   if (role === "assistant") {
     const regenerateAction = document.createElement("button");
     regenerateAction.type = "button";
@@ -802,7 +816,7 @@ function appendMessageToDOM(role, content, options = {}) {
     regenerateAction.addEventListener("click", regenerateLastAssistant);
     actions.appendChild(regenerateAction);
   }
-  wrap.appendChild(actions);
+  if (actions.childElementCount) wrap.appendChild(actions);
   row.appendChild(wrap);
   messages.appendChild(row);
 
@@ -812,6 +826,255 @@ function appendMessageToDOM(role, content, options = {}) {
 
 function formatTime(value) {
   return new Date(value).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+}
+
+function renderAttachmentCards(container, attachments) {
+  const group = document.createElement("div");
+  group.className = "message-attachments";
+
+  for (const attachment of attachments) {
+    const card = document.createElement("div");
+    card.className = "attachment-card";
+
+    const icon = document.createElement("span");
+    icon.className = "attachment-icon";
+    icon.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3h7l5 5v13H7z"/><path d="M14 3v5h5M10 13h6M10 17h6"/></svg>';
+
+    const copy = document.createElement("span");
+    copy.className = "attachment-copy";
+    const name = document.createElement("strong");
+    name.textContent = attachment.name || "Document";
+    const status = document.createElement("small");
+    status.textContent = `${formatFileSize(attachment.size)} • ${attachment.status || "Ready for analysis"}`;
+    copy.append(name, status);
+
+    card.append(icon, copy);
+    group.appendChild(card);
+  }
+
+  container.appendChild(group);
+}
+
+function renderArtifactCard(container, artifact) {
+  const card = document.createElement("div");
+  card.className = "artifact-card";
+
+  const icon = document.createElement("span");
+  icon.className = "artifact-icon";
+  icon.textContent = String(artifact.extension || "file").slice(0, 4).toUpperCase();
+
+  const copy = document.createElement("span");
+  copy.className = "artifact-copy";
+  const name = document.createElement("strong");
+  name.textContent = artifact.name;
+  const detail = document.createElement("small");
+  detail.textContent = `${artifact.label} • ${formatFileSize(new Blob([artifact.content || ""]).size)}`;
+  copy.append(name, detail);
+
+  const download = document.createElement("button");
+  download.type = "button";
+  download.className = "artifact-download";
+  download.textContent = "Download";
+  download.addEventListener("click", async () => {
+    download.disabled = true;
+    download.textContent = "Preparing…";
+    try {
+      await downloadArtifact(artifact);
+      download.textContent = "Downloaded";
+    } catch (error) {
+      console.error(error);
+      download.textContent = "Try again";
+    } finally {
+      download.disabled = false;
+      setTimeout(() => (download.textContent = "Download"), 1400);
+    }
+  });
+
+  card.append(icon, copy, download);
+  container.appendChild(card);
+}
+
+function formatFileSize(bytes = 0) {
+  const size = Number(bytes) || 0;
+  if (size < 1024) return `${size} B`;
+  if (size < 1024 * 1024) return `${Math.max(1, Math.round(size / 1024))} KB`;
+  return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function detectRequestedArtifact(input) {
+  const text = String(input || "").trim();
+  const explicitName = text.match(/\b([a-z0-9][a-z0-9._-]{0,80}\.(?:html?|css|m?js|cjs|ts|tsx|jsx|py|pdf|docx?|txt|md|json|csv|tsv|xml|ya?ml|toml|ini|sql|java|c|cpp|h|hpp|cs|php|rb|go|rs|swift|kt|kts|sh|bash|ps1|rtf|svg|tex))\b/i)?.[1];
+  const hasFileVerb = /\b(?:return|give|send|download|export|save|create|make|generate|provide|build)\b/i.test(text);
+  const hasFileFormat = /\b(?:file|document|pdf|word|docx?|html|css|javascript|typescript|python|markdown|text|json|csv|xml|yaml|code|website|webpage)\b/i.test(text);
+
+  if (!explicitName && !(hasFileVerb && hasFileFormat)) return null;
+
+  let extension = explicitName?.split(".").pop()?.toLowerCase() || inferArtifactExtension(text);
+  if (extension === "htm") extension = "html";
+  if (extension === "docx") extension = "doc";
+  if (!extension) extension = "txt";
+
+  const format = getArtifactFormat(extension);
+  let name = explicitName ? sanitizeArtifactName(explicitName) : defaultArtifactName(text, extension);
+  if (/\.docx$/i.test(name)) name = name.replace(/\.docx$/i, ".doc");
+  if (!name.toLowerCase().endsWith(`.${extension}`)) name = `${name.replace(/\.[^.]+$/, "")}.${extension}`;
+
+  return { name, extension, ...format };
+}
+
+function inferArtifactExtension(text) {
+  const formats = [
+    ["pdf", /\bpdf\b/i], ["doc", /\b(?:word|microsoft word|docx?|word document)\b/i],
+    ["html", /\b(?:html|webpage|website)\b/i], ["css", /\bcss\b/i],
+    ["js", /\b(?:javascript|js file)\b/i], ["ts", /\b(?:typescript|ts file)\b/i],
+    ["py", /\b(?:python|py file)\b/i], ["json", /\bjson\b/i], ["csv", /\bcsv\b/i],
+    ["md", /\b(?:markdown|md file)\b/i], ["xml", /\bxml\b/i], ["yaml", /\bya?ml\b/i],
+    ["sql", /\bsql\b/i], ["svg", /\bsvg\b/i], ["txt", /\b(?:plain text|text file|document)\b/i]
+  ];
+  return formats.find(([, pattern]) => pattern.test(text))?.[0] || "txt";
+}
+
+function getArtifactFormat(extension) {
+  const formats = {
+    pdf: ["PDF document", "application/pdf"], doc: ["Word document", "application/msword"],
+    html: ["HTML", "text/html"], css: ["CSS", "text/css"], js: ["JavaScript", "text/javascript"],
+    mjs: ["JavaScript module", "text/javascript"], cjs: ["JavaScript", "text/javascript"],
+    ts: ["TypeScript", "text/typescript"], tsx: ["TypeScript React", "text/typescript"],
+    jsx: ["JavaScript React", "text/javascript"], py: ["Python", "text/x-python"],
+    json: ["JSON", "application/json"], csv: ["CSV", "text/csv"], tsv: ["TSV", "text/tab-separated-values"],
+    md: ["Markdown", "text/markdown"], xml: ["XML", "application/xml"], yaml: ["YAML", "text/yaml"], yml: ["YAML", "text/yaml"],
+    svg: ["SVG", "image/svg+xml"], rtf: ["Rich Text", "application/rtf"],
+    sql: ["SQL", "text/plain"], java: ["Java", "text/plain"], c: ["C", "text/plain"], cpp: ["C++", "text/plain"],
+    h: ["C header", "text/plain"], hpp: ["C++ header", "text/plain"], cs: ["C#", "text/plain"],
+    php: ["PHP", "text/plain"], rb: ["Ruby", "text/plain"], go: ["Go", "text/plain"], rs: ["Rust", "text/plain"],
+    swift: ["Swift", "text/plain"], kt: ["Kotlin", "text/plain"], kts: ["Kotlin script", "text/plain"],
+    sh: ["Shell script", "text/plain"], bash: ["Bash script", "text/plain"], ps1: ["PowerShell", "text/plain"],
+    toml: ["TOML", "text/plain"], ini: ["INI", "text/plain"], tex: ["LaTeX", "text/plain"], txt: ["Text document", "text/plain"]
+  };
+  const [label, mime] = formats[extension] || [`${extension.toUpperCase()} file`, "text/plain"];
+  return { label, mime };
+}
+
+function defaultArtifactName(text, extension) {
+  const slug = String(text)
+    .toLowerCase()
+    .replace(/\b(?:return|give|send|download|export|save|create|make|generate|provide|build|as|a|an|the|file|document|please)\b/g, " ")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 42) || "picklo-file";
+  return `${slug}.${extension}`;
+}
+
+function sanitizeArtifactName(name) {
+  return String(name).replace(/[^a-z0-9._-]+/gi, "-").replace(/^-+/, "").slice(0, 100) || "picklo-file.txt";
+}
+
+function createArtifactDescriptor(request, reply) {
+  const content = extractArtifactContent(reply, request.extension);
+  return {
+    ...request,
+    content: content.slice(0, 600000),
+    createdAt: Date.now()
+  };
+}
+
+function extractArtifactContent(reply, extension) {
+  const source = String(reply || "").trim();
+  const fences = [...source.matchAll(/```([^\n`]*)\n?([\s\S]*?)```/g)];
+  if (!fences.length || ["pdf", "doc", "txt", "md", "rtf"].includes(extension)) return source;
+
+  const aliases = new Set([extension]);
+  if (["js", "mjs", "cjs", "jsx"].includes(extension)) aliases.add("javascript");
+  if (["ts", "tsx"].includes(extension)) aliases.add("typescript");
+  if (extension === "py") aliases.add("python");
+  const preferred = fences.find((match) => aliases.has(String(match[1] || "").trim().toLowerCase()));
+  return String((preferred || fences[0])[2] || "").trim();
+}
+
+async function downloadArtifact(artifact) {
+  let blob;
+  if (artifact.extension === "pdf") blob = buildSimplePdfBlob(artifact.content);
+  else if (artifact.extension === "doc") blob = buildWordCompatibleBlob(artifact.content);
+  else blob = new Blob([artifact.content || ""], { type: `${artifact.mime || "text/plain"};charset=utf-8` });
+
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = artifact.name;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function buildWordCompatibleBlob(content) {
+  const html = `<!doctype html><html><head><meta charset="utf-8"><title>Picklo document</title></head><body><pre style="white-space:pre-wrap;font:11pt/1.5 Arial,sans-serif">${escapeHtmlText(content)}</pre></body></html>`;
+  return new Blob([html], { type: "application/msword" });
+}
+
+function buildSimplePdfBlob(content) {
+  const plain = String(content || "")
+    .replace(/```[^\n]*\n?/g, "")
+    .replace(/```/g, "")
+    .replace(/[*_#>`]/g, "")
+    .normalize("NFKD")
+    .replace(/[^\x09\x0A\x0D\x20-\x7E]/g, "?");
+  const lines = wrapPdfText(plain, 88);
+  const pages = [];
+  for (let i = 0; i < Math.max(lines.length, 1); i += 52) pages.push(lines.slice(i, i + 52));
+
+  const pageCount = pages.length;
+  const fontId = 3 + pageCount * 2;
+  const objects = [];
+  objects[1] = "<< /Type /Catalog /Pages 2 0 R >>";
+  const kids = pages.map((_, index) => `${3 + index * 2} 0 R`).join(" ");
+  objects[2] = `<< /Type /Pages /Kids [${kids}] /Count ${pageCount} >>`;
+
+  pages.forEach((pageLines, index) => {
+    const pageId = 3 + index * 2;
+    const contentId = pageId + 1;
+    const commands = pageLines.map((line) => `(${escapePdfText(line)}) Tj T*`).join("\n");
+    const stream = `BT\n/F1 10 Tf\n12 TL\n50 790 Td\n${commands}\nET`;
+    objects[pageId] = `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 842] /Resources << /Font << /F1 ${fontId} 0 R >> >> /Contents ${contentId} 0 R >>`;
+    objects[contentId] = `<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`;
+  });
+  objects[fontId] = "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>";
+
+  let pdf = "%PDF-1.4\n% Picklo\n";
+  const offsets = [0];
+  for (let id = 1; id <= fontId; id++) {
+    offsets[id] = pdf.length;
+    pdf += `${id} 0 obj\n${objects[id]}\nendobj\n`;
+  }
+  const xref = pdf.length;
+  pdf += `xref\n0 ${fontId + 1}\n0000000000 65535 f \n`;
+  for (let id = 1; id <= fontId; id++) pdf += `${String(offsets[id]).padStart(10, "0")} 00000 n \n`;
+  pdf += `trailer\n<< /Size ${fontId + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`;
+  return new Blob([pdf], { type: "application/pdf" });
+}
+
+function wrapPdfText(text, width) {
+  const lines = [];
+  for (const paragraph of String(text).replace(/\r/g, "").split("\n")) {
+    if (!paragraph.trim()) { lines.push(""); continue; }
+    const words = paragraph.trim().split(/\s+/);
+    let line = "";
+    for (const word of words) {
+      if (!line) line = word;
+      else if (`${line} ${word}`.length <= width) line += ` ${word}`;
+      else { lines.push(line); line = word; }
+    }
+    if (line) lines.push(line);
+  }
+  return lines;
+}
+
+function escapePdfText(text) {
+  return String(text).replace(/\\/g, "\\\\").replace(/\(/g, "\\(").replace(/\)/g, "\\)");
+}
+
+function escapeHtmlText(text) {
+  return String(text).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
 function renderStats() {
@@ -1071,6 +1334,8 @@ async function sendMessage() {
   autoResize();
 
   let route = null;
+  const requestedArtifact = detectRequestedArtifact(content);
+  const pendingFileIds = Array.isArray(chat.pendingFileIds) ? chat.pendingFileIds : [];
 
   try {
     route = state.autoTools ? await routeAgentTool(content) : null;
@@ -1093,12 +1358,12 @@ async function sendMessage() {
     }
 
     const forceFiles = Boolean(route?.forceFiles);
-    const shouldRetrieve = forceFiles || shouldUseLocalFiles(content);
+    const shouldRetrieve = pendingFileIds.length > 0 || forceFiles || shouldUseLocalFiles(content);
 
     let retrieved = [];
     if (shouldRetrieve) {
       setAgentActivity("Searching local files", "File search");
-      retrieved = await retrieveLocalContext(route?.query || content);
+      retrieved = await retrieveLocalContext(route?.query || content, pendingFileIds);
       recordAgentActivity(
         "File search",
         retrieved.length
@@ -1153,7 +1418,7 @@ async function sendMessage() {
     const profile = getPerformanceProfile();
 
     const stream = await engine.chat.completions.create({
-      messages: buildModelMessages(chat, retrieved, route?.toolContext || ""),
+      messages: buildModelMessages(chat, retrieved, route?.toolContext || "", requestedArtifact),
       temperature: profile.temperature,
       top_p: 0.9,
       max_tokens: profile.maxTokens,
@@ -1162,7 +1427,6 @@ async function sendMessage() {
     });
 
     let receivedFirstToken = false;
-    let lastStreamRender = 0;
 
     for await (const chunk of stream) {
       const delta = chunk.choices?.[0]?.delta?.content || "";
@@ -1175,23 +1439,13 @@ async function sendMessage() {
 
       if (!receivedFirstToken) {
         receivedFirstToken = true;
-        setAgentActivity("Answering", route?.toolName || "Model");
+        setAgentActivity("Preparing the answer", route?.toolName || "Model");
       }
 
       fullReply += delta;
-
-      // Rendering every token can slow the main thread even though inference is in a worker.
-      // Batch visual updates while retaining the complete streamed response.
-      const now = performance.now();
-      if (now - lastStreamRender >= STREAM_RENDER_INTERVAL_MS) {
-        assistantBubble.textContent = fullReply;
-        scrollToBottom();
-        lastStreamRender = now;
-      }
     }
 
-    assistantBubble.textContent = fullReply;
-    scrollToBottom();
+    fullReply = cleanAssistantReply(fullReply);
 
     const elapsedSeconds = Math.max((performance.now() - generationStartedAt) / 1000, 0.001);
     lastGenerationStats = {
@@ -1217,14 +1471,41 @@ async function sendMessage() {
       fullReply = "I could not complete that response.";
     }
 
+    const artifact = !generationWasStopped && requestedArtifact
+      ? createArtifactDescriptor(requestedArtifact, fullReply)
+      : null;
+    const displayReply = artifact ? `Your **${artifact.label}** file is ready.` : fullReply;
+
+    assistantBubble.textContent = artifact ? `Your ${artifact.label} file is ready.` : fullReply;
+    scrollToBottom();
+
     chat.messages.push({
       role: "assistant",
-      content: fullReply,
+      content: displayReply,
+      modelContent: fullReply,
       createdAt: Date.now(),
       sources: sourceNames,
-      tool: route?.toolName || (retrieved.length ? "File search" : "")
+      tool: artifact ? "File created" : route?.toolName || (retrieved.length ? "File search" : ""),
+      artifact
     });
+    if (pendingFileIds.length) {
+      const analyzedIds = new Set(pendingFileIds);
+      for (const message of chat.messages) {
+        if (!Array.isArray(message.attachments)) continue;
+        message.attachments = message.attachments.map((attachment) =>
+          analyzedIds.has(attachment.id)
+            ? { ...attachment, status: "Analyzed for this response" }
+            : attachment
+        );
+      }
+    }
+    chat.pendingFileIds = [];
     chat.updatedAt = Date.now();
+
+    if (artifact) {
+      setAgentActivity("Returning file", "File created");
+      recordAgentActivity("File created", artifact.name);
+    }
 
     saveState();
     renderMessages();
@@ -1253,7 +1534,7 @@ async function sendMessage() {
   }
 }
 
-function buildModelMessages(chat, retrieved, toolContext = "") {
+function buildModelMessages(chat, retrieved, toolContext = "", requestedArtifact = null) {
   const memoryBlock = state.memories.length
     ? `PERSISTENT MEMORY:\n${state.memories.map((item, index) => `${index + 1}. ${item.text}`).join("\n")}`
     : "";
@@ -1262,20 +1543,28 @@ function buildModelMessages(chat, retrieved, toolContext = "") {
     ? `LOCAL FILE CONTEXT:\n${retrieved.map((item, index) => `[${index + 1}] Source: ${item.name}\n${item.text}`).join("\n\n")}`
     : "";
 
+  const artifactContext = requestedArtifact
+    ? `FILE RETURN REQUEST:\nCreate the complete contents for ${requestedArtifact.name}. Return the finished content only. For code files, use one complete fenced code block in the correct language. Do not describe tool usage or omit required sections.`
+    : "";
+
   const system = [
     BASE_SYSTEM_PROMPT,
     `CURRENT MODE:\n${MODE_PROMPTS[state.activeMode] || MODE_PROMPTS.general}`,
     memoryBlock,
     localContext,
-    toolContext ? `TOOL RESULT CONTEXT:\n${toolContext}` : ""
+    toolContext ? `TOOL RESULT CONTEXT:\n${toolContext}` : "",
+    artifactContext
   ].filter(Boolean).join("\n\n");
 
   return [
     { role: "system", content: system },
-    ...chat.messages.slice(-getPerformanceProfile().recentMessages).map((message) => ({
-      role: message.role,
-      content: message.content
-    }))
+    ...chat.messages
+      .slice(-getPerformanceProfile().recentMessages)
+      .filter((message) => String(message.modelContent || message.content || "").trim())
+      .map((message) => ({
+        role: message.role,
+        content: message.modelContent || message.content
+      }))
   ];
 }
 
@@ -1372,6 +1661,7 @@ async function handleFiles(event) {
   if (!files.length) return;
 
   composerNote.textContent = "Adding files locally…";
+  const uploaded = [];
 
   for (const file of files) {
     try {
@@ -1379,13 +1669,22 @@ async function handleFiles(event) {
       const cleaned = text.replace(/\u0000/g, "").trim().slice(0, MAX_FILE_CHARS);
       if (!cleaned) throw new Error("No readable text was found.");
 
-      await putLocalFile({
+      const document = {
         id: crypto.randomUUID ? crypto.randomUUID() : `file-${Date.now()}-${Math.random()}`,
         name: file.name,
         type: file.type || file.name.split(".").pop() || "text",
         size: file.size,
         text: cleaned,
         createdAt: Date.now()
+      };
+      await putLocalFile(document);
+      uploaded.push({
+        id: document.id,
+        name: document.name,
+        type: document.type,
+        size: document.size,
+        status: "Uploaded and ready for analysis",
+        createdAt: document.createdAt
       });
     } catch (error) {
       alert(`${file.name}: ${error?.message || "Could not read this file."}`);
@@ -1393,9 +1692,31 @@ async function handleFiles(event) {
   }
 
   localFiles = await listLocalFiles();
+  if (uploaded.length) {
+    const chat = getActiveChat();
+    chat.messages.push({
+      role: "user",
+      content: "",
+      attachments: uploaded,
+      createdAt: Date.now()
+    });
+    chat.pendingFileIds = [...new Set([...(chat.pendingFileIds || []), ...uploaded.map((file) => file.id)])];
+    chat.mode = "analyze";
+    chat.updatedAt = Date.now();
+    if (chat.title === "New chat") chat.title = `Analyze ${uploaded[0].name}`.slice(0, 48);
+    activeFileSources = uploaded.map((file) => file.name);
+    setMode("analyze", false);
+    saveState();
+    renderMessages();
+    renderChats();
+    renderHeader();
+    renderContext();
+  }
   renderFiles();
   renderStats();
-  composerNote.textContent = "Files added. Picklo can now retrieve them when relevant.";
+  composerNote.textContent = uploaded.length
+    ? `${uploaded.length} document${uploaded.length === 1 ? "" : "s"} uploaded and ready for your next question.`
+    : "No readable documents were added.";
   setTimeout(() => {
     composerNote.textContent = "Chats, memory and files stay in this browser.";
   }, 2500);
@@ -1406,7 +1727,44 @@ async function extractFileText(file) {
   if (file.type === "application/pdf" || lower.endsWith(".pdf")) {
     return extractPdfText(file);
   }
+  if (lower.endsWith(".docx")) return extractDocxText(file);
+  if (lower.endsWith(".doc")) throw new Error("Older .doc files are not supported yet. Save it as .docx or PDF first.");
+  if (lower.endsWith(".rtf")) return extractRtfText(await file.text());
   return file.text();
+}
+
+async function extractDocxText(file) {
+  if (!window.mammoth) {
+    await loadExternalScript("https://cdn.jsdelivr.net/npm/mammoth@1.9.1/mammoth.browser.min.js");
+  }
+  const result = await window.mammoth.extractRawText({ arrayBuffer: await file.arrayBuffer() });
+  return result.value || "";
+}
+
+function extractRtfText(source) {
+  return String(source)
+    .replace(/\\par[d]?/g, "\n")
+    .replace(/\\'[0-9a-f]{2}/gi, " ")
+    .replace(/\\[a-z]+-?\d* ?/gi, "")
+    .replace(/[{}]/g, "")
+    .replace(/\n{3,}/g, "\n\n");
+}
+
+function loadExternalScript(src) {
+  return new Promise((resolve, reject) => {
+    const existing = document.querySelector(`script[src="${src}"]`);
+    if (existing) {
+      if (window.mammoth) resolve();
+      else existing.addEventListener("load", resolve, { once: true });
+      return;
+    }
+    const script = document.createElement("script");
+    script.src = src;
+    script.async = true;
+    script.onload = resolve;
+    script.onerror = () => reject(new Error("The Word document reader could not load."));
+    document.head.appendChild(script);
+  });
 }
 
 async function extractPdfText(file) {
@@ -1537,19 +1895,21 @@ function shouldUseLocalFiles(text) {
   return /\b(file|files|document|documents|pdf|uploaded|upload|attachment|attached|notes?|read this|according to|in my)\b/i.test(text);
 }
 
-async function retrieveLocalContext(query) {
+async function retrieveLocalContext(query, preferredFileIds = []) {
   if (!localFiles.length) return [];
 
   const tokens = tokenSet(query);
-  if (!tokens.size) return [];
+  const preferred = new Set(preferredFileIds || []);
+  if (!tokens.size && !preferred.size) return [];
 
   const scored = [];
 
   for (const file of localFiles) {
+    const isPreferred = preferred.has(file.id);
     const chunks = chunkText(file.text);
     chunks.forEach((chunk, index) => {
       const lower = chunk.toLowerCase();
-      let score = 0;
+      let score = isPreferred ? 8 - Math.min(index, 4) : 0;
 
       for (const token of tokens) {
         if (token.length < 3) continue;
@@ -1559,7 +1919,7 @@ async function retrieveLocalContext(query) {
       }
 
       if (score > 0) {
-        scored.push({ name: file.name, text: chunk, score, index });
+        scored.push({ id: file.id, name: file.name, text: chunk, score, index });
       }
     });
   }
@@ -1618,10 +1978,29 @@ function renderContext() {
   contextBanner.classList.remove("hidden");
 }
 
+function shouldExposeToolActivity(toolName = "", metadata = {}) {
+  if (metadata.fileArtifact === true) return true;
+  return /^(?:file delivery|file export|file created)$/i.test(String(toolName).trim());
+}
+
+function cleanAssistantReply(reply) {
+  return String(reply || "")
+    .replace(/<think>[\s\S]*?<\/think>/gi, "")
+    .replace(/<analysis>[\s\S]*?<\/analysis>/gi, "")
+    .replace(/^\s*\[(?:tool|calculator|code sandbox|internal)\][^\n]*\n?/gim, "")
+    .trim();
+}
+
 function setAgentActivity(text, toolName = "") {
+  if (!shouldExposeToolActivity(toolName)) {
+    agentActivityBar.classList.add("hidden");
+    agentStatus.textContent = state.autoTools === false ? "Agent off" : "Agent ready";
+    return;
+  }
+
   agentActivityText.textContent = text;
   agentActivityBar.classList.remove("hidden");
-  agentStatus.textContent = toolName ? `Using ${toolName}` : "Working";
+  agentStatus.textContent = "Returning file";
 }
 
 function setAgentIdle() {
@@ -1634,6 +2013,8 @@ function setAgentIdleSoon() {
 }
 
 function recordAgentActivity(tool, detail) {
+  if (!shouldExposeToolActivity(tool)) return;
+
   const entry = {
     id: crypto.randomUUID ? crypto.randomUUID() : `tool-${Date.now()}-${Math.random()}`,
     tool,
@@ -1650,23 +2031,24 @@ function renderAgentHistory() {
   if (!agentHistoryList) return;
 
   const enabled = state.autoTools !== false;
-  agentCardStatus.textContent = enabled ? "Agent routing is on" : "Agent routing is off";
+  agentCardStatus.textContent = enabled ? "Private processing is on" : "Private processing is off";
   agentStatus.textContent = enabled ? "Agent ready" : "Agent off";
 
-  const count = state.agentHistory.length;
-  agentToolCount.textContent = `${count} call${count === 1 ? "" : "s"}`;
+  const visibleHistory = state.agentHistory.filter((entry) => shouldExposeToolActivity(entry.tool));
+  const count = visibleHistory.length;
+  agentToolCount.textContent = `${count} file${count === 1 ? "" : "s"}`;
 
   agentHistoryList.innerHTML = "";
 
   if (!count) {
     const empty = document.createElement("div");
     empty.className = "agent-history-empty";
-    empty.textContent = "No automatic tool activity yet.";
+    empty.textContent = "No files returned yet.";
     agentHistoryList.appendChild(empty);
     return;
   }
 
-  for (const entry of state.agentHistory.slice(0, 5)) {
+  for (const entry of visibleHistory.slice(0, 5)) {
     const row = document.createElement("div");
     row.className = "agent-history-row";
 
@@ -1788,9 +2170,9 @@ async function routeAgentTool(content) {
 
       if (intent.explain) {
         return {
-          handled: false,
-          toolName: "Calculator",
-          toolContext: `The calculator evaluated "${intent.expression}" and returned ${formatted}. Explain this result to the user without changing the computed value.`
+          handled: true,
+          tool: "Calculator",
+          reply: `**${formatted}**\n\nCalculation: \`${intent.expression}\``
         };
       }
 
@@ -1832,15 +2214,12 @@ async function routeAgentTool(content) {
   if (intent.type === "code_prepare") {
     setAgentActivity("Preparing JavaScript sandbox", "Code sandbox");
     codeRunnerInput.value = intent.code;
-    switchToolTab("code");
-    renderNotes();
-    openSheet(toolsSheet);
     recordAgentActivity("Code sandbox", "Loaded JavaScript for manual execution");
 
     return {
       handled: true,
       tool: "Code sandbox",
-      reply: "I loaded that JavaScript into the local sandbox. Review it, then press **Run code** when you want to execute it."
+      reply: "The JavaScript is ready in **Tools → Code**. Open it when you want to review and run it."
     };
   }
 

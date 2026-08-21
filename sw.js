@@ -1,4 +1,4 @@
-const CACHE = "picklo-v7-shell-v2";
+const CACHE = "picklo-v7-shell-v3";
 const SHELL = [
   "./",
   "./index.html",
@@ -47,4 +47,3 @@ self.addEventListener("fetch", (event) => {
     })
   );
 });
-

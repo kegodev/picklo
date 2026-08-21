@@ -365,6 +365,291 @@ body {
   }
 }
 
+/* =========================================================
+   Picklo V7.2 — document cards, KM Digital Labs identity,
+   and a natural charcoal dark theme
+   ========================================================= */
+
+.product-credit {
+  display: block;
+  margin-top: 4px;
+  color: var(--muted-2);
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: .09em;
+  line-height: 1.25;
+}
+
+.product-signature {
+  color: var(--text);
+  font-weight: 700;
+}
+
+.message-attachments {
+  display: grid;
+  gap: 8px;
+  min-width: min(320px, 66vw);
+  margin: 2px 0 4px;
+}
+
+.attachment-card,
+.artifact-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: 13px;
+  background: var(--surface-3);
+  padding: 10px;
+}
+
+.user .attachment-card {
+  border-color: rgba(255,255,255,.22);
+  background: rgba(255,255,255,.11);
+}
+
+.attachment-icon,
+.artifact-icon {
+  width: 38px;
+  height: 38px;
+  flex: 0 0 auto;
+  border-radius: 10px;
+  background: var(--surface-2);
+  color: var(--text);
+  display: grid;
+  place-items: center;
+}
+
+.attachment-icon svg {
+  width: 21px;
+  height: 21px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.user .attachment-icon {
+  background: rgba(0,0,0,.14);
+  color: #fff;
+}
+
+.artifact-icon {
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: .03em;
+}
+
+.attachment-copy,
+.artifact-copy {
+  min-width: 0;
+  flex: 1;
+}
+
+.attachment-copy strong,
+.attachment-copy small,
+.artifact-copy strong,
+.artifact-copy small {
+  display: block;
+}
+
+.attachment-copy strong,
+.artifact-copy strong {
+  color: inherit;
+  font-size: 12px;
+  line-height: 1.35;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.attachment-copy small,
+.artifact-copy small {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.user .attachment-copy small {
+  color: rgba(255,255,255,.74);
+}
+
+.artifact-download {
+  flex: 0 0 auto;
+  min-height: 34px;
+  border: 1px solid var(--border-strong);
+  border-radius: 9px;
+  background: var(--text);
+  color: var(--surface);
+  padding: 0 10px;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.artifact-download:disabled {
+  cursor: wait;
+  opacity: .65;
+}
+
+html[data-theme="dark"] {
+  --bg: #141714;
+  --surface: #171a17;
+  --surface-2: #20241f;
+  --surface-3: #252a24;
+  --sidebar: #181b18;
+  --border: #30362f;
+  --border-strong: #454d43;
+  --text: #f6f6f2;
+  --muted: #b9beb5;
+  --muted-2: #8f968c;
+  --navy: #f6f6f2;
+  --purple: #aab7a5;
+  --purple-2: #aab7a5;
+  --purple-soft: #2b312a;
+  --green: #aab7a5;
+  --danger: #d7a29e;
+}
+
+html[data-theme="dark"],
+html[data-theme="dark"] body,
+html[data-theme="dark"] .app,
+html[data-theme="dark"] .chat-shell,
+html[data-theme="dark"] .messages,
+html[data-theme="dark"] .composer {
+  background: #141714 !important;
+}
+
+html[data-theme="dark"] .sidebar,
+html[data-theme="dark"] .sheet,
+html[data-theme="dark"] .loading-strip {
+  background: #181b18 !important;
+  border-color: #30362f !important;
+}
+
+html[data-theme="dark"] .chat-header {
+  background: rgba(20,23,20,.96) !important;
+  border-color: #30362f !important;
+}
+
+html[data-theme="dark"] .conversation-search,
+html[data-theme="dark"] .sidebar-new,
+html[data-theme="dark"] .header-new,
+html[data-theme="dark"] .header-more,
+html[data-theme="dark"] .mode-pill,
+html[data-theme="dark"] .theme-toggle,
+html[data-theme="dark"] .composer-box,
+html[data-theme="dark"] .starter-grid button,
+html[data-theme="dark"] .quick-actions button,
+html[data-theme="dark"] .select-field,
+html[data-theme="dark"] .sheet-textarea,
+html[data-theme="dark"] .file-item,
+html[data-theme="dark"] .memory-item,
+html[data-theme="dark"] .note-item,
+html[data-theme="dark"] .tool-result,
+html[data-theme="dark"] .tool-tabs button,
+html[data-theme="dark"] .tool-input,
+html[data-theme="dark"] .local-tools-grid button,
+html[data-theme="dark"] .data-grid button,
+html[data-theme="dark"] .data-grid label,
+html[data-theme="dark"] .mode-list button,
+html[data-theme="dark"] .secondary-action,
+html[data-theme="dark"] .agent-card,
+html[data-theme="dark"] .artifact-card {
+  background: #20241f !important;
+  border-color: #343a33 !important;
+  color: #f6f6f2 !important;
+}
+
+html[data-theme="dark"] .composer-box {
+  background: #1d211d !important;
+  border-color: #3a4138 !important;
+}
+
+html[data-theme="dark"] .message-bubble {
+  background: #20241f !important;
+  color: #f6f6f2 !important;
+  border: 1px solid #2d332c;
+}
+
+html[data-theme="dark"] .user .message-bubble {
+  background: #30362f !important;
+  color: #ffffff !important;
+  border-color: #424a40;
+}
+
+html[data-theme="dark"] .chat-item:hover,
+html[data-theme="dark"] .sidebar-tool:hover {
+  background: #20241f !important;
+}
+
+html[data-theme="dark"] .chat-item.active {
+  background: #272c26 !important;
+  border-color: #3c443a !important;
+}
+
+html[data-theme="dark"] .send-button,
+html[data-theme="dark"] .tool-run,
+html[data-theme="dark"] .primary-action {
+  background: #f3f3ef !important;
+  color: #151815 !important;
+  border-color: #f3f3ef !important;
+}
+
+html[data-theme="dark"] .version,
+html[data-theme="dark"] .source-chip,
+html[data-theme="dark"] .tool-tabs button.active,
+html[data-theme="dark"] .agent-card-badge {
+  background: #2b312a !important;
+  border-color: #4a5447 !important;
+  color: #dce4d8 !important;
+}
+
+html[data-theme="dark"] .context-banner {
+  background: #20251f !important;
+  border-color: #3b4439 !important;
+  color: #d9e0d5 !important;
+}
+
+html[data-theme="dark"] .code-block,
+html[data-theme="dark"] .code-runner-input,
+html[data-theme="dark"] .code-output {
+  background: #101310 !important;
+  border-color: #30362f !important;
+  color: #f1f2ee !important;
+}
+
+html[data-theme="dark"] .attachment-card {
+  border-color: rgba(255,255,255,.17);
+  background: rgba(255,255,255,.07);
+}
+
+html[data-theme="dark"] .attachment-icon,
+html[data-theme="dark"] .artifact-icon {
+  background: #2d332c;
+  color: #eef1eb;
+}
+
+html[data-theme="dark"] .artifact-download {
+  background: #f3f3ef;
+  border-color: #f3f3ef;
+  color: #151815;
+}
+
+html[data-theme="dark"] .product-credit,
+html[data-theme="dark"] .product-signature {
+  color: #c7ccc3 !important;
+}
+
+@media (max-width: 620px) {
+  .message-attachments { min-width: min(270px, 76vw); }
+  .artifact-card { align-items: flex-start; flex-wrap: wrap; }
+  .artifact-copy { min-width: 150px; }
+  .artifact-download { width: 100%; }
+  .product-signature { display: none; }
+}
+
 
 /* =========================================================
    Picklo V4.2.2 — White light mode + true black dark mode
