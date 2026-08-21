@@ -36,20 +36,55 @@ export function classifyAgentIntent(input, options = {}) {
 }
 
 export function extractMathExpression(input) {
-  let text = String(input || "").trim();
-  if (!text) return null;
-  const explain = /\b(explain|show\s+me|steps?|why)\b/i.test(text);
-  text = text
-    .replace(/^\s*(?:calculate|compute|evaluate)\s*[:\-]?\s*/i, "")
+  const original = String(input || "").trim();
+  if (!original) return null;
+
+  const explain = /\b(explain|show\s+me|steps?|why|working)\b/i.test(original);
+  const percentOf = original.match(/(?:what(?:'s| is)|calculate|compute|find)?\s*(-?\d+(?:\.\d+)?)\s*%\s+of\s+(-?\d+(?:\.\d+)?)/i);
+  if (percentOf) {
+    return {
+      expression: `(${percentOf[1]} / 100) * ${percentOf[2]}`,
+      explain
+    };
+  }
+
+  const wordOperation = extractWordOperation(original);
+  if (wordOperation) return { expression: wordOperation, explain };
+
+  let text = original
+    .replace(/^\s*(?:calculate|compute|evaluate|solve)\s*[:\-]?\s*/i, "")
     .replace(/^\s*what(?:'s| is)\s+/i, "")
-    .replace(/\s*(?:and\s+)?(?:explain(?:\s+it)?|show\s+(?:me\s+)?(?:the\s+)?steps?|step\s+by\s+step|why)\s*\??\s*$/i, "")
-    .replace(/\s*(?:please|\?)\s*$/i, "")
+    .replace(/\s*(?:and\s+)?(?:explain(?:\s+it)?|show\s+(?:me\s+)?(?:the\s+)?(?:steps?|working)|step\s+by\s+step|why)\s*\??\s*$/i, "")
+    .replace(/\s*(?:please|\?|=)\s*$/i, "")
+    .replace(/\*\*/g, "^")
     .trim();
+
   if (text.includes("=") || !/[0-9]/.test(text)) return null;
   const allowed = /^(?:[\d\s.+\-*/%^(),]|sqrt|abs|sin|cos|tan|log|ln|exp|pi|e)+$/i;
   if (!allowed.test(text)) return null;
   if (!/[+\-*/%^()]|\b(?:sqrt|abs|sin|cos|tan|log|ln|exp)\b/i.test(text)) return null;
   return { expression: text, explain };
+}
+
+function extractWordOperation(text) {
+  const number = "(-?\\d+(?:\\.\\d+)?)";
+  const patterns = [
+    { regex: new RegExp(`(?:add|sum of)\\s+${number}\\s+(?:and|to)\\s+${number}`, "i"), op: "+" },
+    { regex: new RegExp(`(?:subtract|difference between)\\s+${number}\\s+(?:and|from)\\s+${number}`, "i"), op: "-" },
+    { regex: new RegExp(`(?:multiply|product of)\\s+${number}\\s+(?:and|by)\\s+${number}`, "i"), op: "*" },
+    { regex: new RegExp(`(?:divide|quotient of)\\s+${number}\\s+(?:and|by)\\s+${number}`, "i"), op: "/" }
+  ];
+
+  for (const { regex, op } of patterns) {
+    const match = text.match(regex);
+    if (!match) continue;
+    const [left, right] = op === "-" && /from/i.test(match[0])
+      ? [match[2], match[1]]
+      : [match[1], match[2]];
+    return `${left} ${op} ${right}`;
+  }
+
+  return "";
 }
 
 function cleanFileQuery(text) {
