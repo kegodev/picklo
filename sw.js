@@ -1,4 +1,4 @@
-const CACHE = "picklo-v7.4-shell-v1";
+const CACHE = "picklo-v8-shell-v1";
 const SHELL = [
   "./",
   "./index.html",
