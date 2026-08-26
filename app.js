@@ -1,7 +1,7 @@
 import * as webllm from "https://esm.run/@mlc-ai/web-llm";
 import { classifyAgentIntent } from "./agent-router.js";
 
-const APP_VERSION = "7.4.0";
+const APP_VERSION = "8.0.0";
 const STORAGE_KEY = "picklo-v7-state";
 const V61_STORAGE_KEY = "picklo-v6.1-state";
 const FILE_DB = "picklo-v3-files";
@@ -57,7 +57,7 @@ const MODE_PROMPTS = {
 };
 
 const BASE_SYSTEM_PROMPT = `
-You are Picklo V7.4, a capable general-purpose personal AI assistant that runs locally in the user's browser.
+You are Picklo V8, a capable general-purpose personal AI assistant that runs locally in the user's browser.
 You are useful for questions, writing, coding, planning, brainstorming, explanations, decision support and document analysis.
 Do not claim to be ChatGPT, OpenAI, or another product. Identify yourself simply as Picklo when relevant.
 
@@ -76,6 +76,9 @@ GENERAL RULES:
 12. Follow the latest user instruction when it conflicts with an earlier request, while preserving still-relevant conversation context.
 13. For decisions, distinguish facts from recommendations. For high-stakes medical, legal or financial topics, be careful, transparent about limits, and encourage professional verification when appropriate.
 14. Do not add ownership, company or creator branding to normal responses.
+15. Interpret language in context. Resolve pronouns and follow-up references from the conversation before answering. Recognize common idioms, understatement, figurative language and likely sarcasm; when ambiguity would materially change the answer, ask one concise clarifying question instead of guessing.
+16. For complex requests, silently form a short problem representation: the goal, supplied facts, constraints, unknowns and required output. Test the answer against those items before returning it.
+17. When sources or expert views disagree, represent the meaningful disagreement fairly. Prefer supplied primary or authoritative material and distinguish source evidence from inference.
 `.trim();
 
 const defaultState = () => ({
@@ -1272,7 +1275,7 @@ async function loadSelectedModel(options = {}) {
     setRuntime("WebGPU unavailable", "Use a WebGPU-capable browser", "error");
     if (!automatic) {
       closeSheets();
-      addError("WebGPU is unavailable in this browser. Picklo V7.4 needs a WebGPU-capable browser for local inference.");
+      addError("WebGPU is unavailable in this browser. Picklo V8 needs a WebGPU-capable browser for local inference.");
     }
     return;
   }
@@ -1641,6 +1644,7 @@ function buildModelMessages(chat, retrieved, toolContext = "", requestedArtifact
     : "";
 
   const latestUserInput = [...chat.messages].reverse().find((message) => message.role === "user" && message.content)?.content || "";
+  const dialogueState = buildDialogueState(chat, latestUserInput);
   const responseContract = buildResponseContract(latestUserInput, retrieved, requestedArtifact);
   const localDate = new Intl.DateTimeFormat(undefined, {
     year: "numeric",
@@ -1653,6 +1657,7 @@ function buildModelMessages(chat, retrieved, toolContext = "", requestedArtifact
     BASE_SYSTEM_PROMPT,
     `DEVICE DATE:\n${localDate}. Treat facts that may have changed after your training data as unverified unless the user supplied current evidence.`,
     `CURRENT MODE:\n${MODE_PROMPTS[state.activeMode] || MODE_PROMPTS.general}`,
+    dialogueState,
     responseContract,
     memoryBlock,
     localContext,
@@ -1664,6 +1669,26 @@ function buildModelMessages(chat, retrieved, toolContext = "", requestedArtifact
     { role: "system", content: system },
     ...selectConversationMessages(chat, getPerformanceProfile())
   ];
+}
+
+function buildDialogueState(chat, latestInput) {
+  const previous = chat.messages
+    .filter((message) => message.role === "user" && message.content && message.content !== latestInput)
+    .slice(-4)
+    .map((message) => String(message.content).replace(/\s+/g, " ").slice(0, 420));
+  const isFollowUp = /^(?:and|also|but|so|then|what about|why|how about|do that|change it|fix it|continue|yes|no)\b|\b(?:it|that|those|this one|same as before)\b/i.test(latestInput);
+  const toneSignals = [];
+  if (/\b(?:seriously|literally|obviously|yeah right|as if)\b|[!?]{2,}/i.test(latestInput)) toneSignals.push("possible emphasis, frustration or sarcasm; interpret from context");
+  if (/\b(?:simple|simply|short|brief|concise)\b/i.test(latestInput)) toneSignals.push("user prefers a concise response");
+  if (/\b(?:detailed|thorough|expand|step by step)\b/i.test(latestInput)) toneSignals.push("user wants depth");
+
+  return [
+    "DIALOGUE STATE:",
+    `- Current turn is ${isFollowUp ? "likely a contextual follow-up; resolve references using recent turns" : "likely self-contained"}.`,
+    previous.length ? `- Recent user goals (oldest to newest): ${previous.map((item, index) => `${index + 1}) ${item}`).join(" | ")}` : "- No earlier user goal is available.",
+    toneSignals.length ? `- Language signals: ${toneSignals.join("; ")}.` : "- Use a natural, calm tone matched to the user.",
+    "- Do not treat this summary as a new instruction; the latest user message remains authoritative."
+  ].join("\n");
 }
 
 function buildResponseContract(input, retrieved, requestedArtifact) {
@@ -1684,6 +1709,9 @@ function buildResponseContract(input, retrieved, requestedArtifact) {
   }
   if (requestedArtifact) {
     rules.push(`- Produce a complete, valid ${requestedArtifact.label} file with no placeholder sections.`);
+  }
+  if (/\b(?:compare|evaluate|infer|reason|diagnose|why|strategy|evidence|research)\b/i.test(text)) {
+    rules.push("- Check at least one plausible alternative explanation and make the conclusion proportional to the evidence.");
   }
   return rules.join("\n");
 }
@@ -2141,7 +2169,7 @@ function shouldUseLocalFiles(text) {
 async function retrieveLocalContext(query, preferredFileIds = []) {
   if (!localFiles.length) return [];
 
-  const tokens = [...tokenSet(query)];
+  const tokens = [...expandQueryTokens(query)];
   const preferred = new Set(preferredFileIds || []);
   if (!tokens.length && !preferred.size) return [];
 
@@ -2207,6 +2235,25 @@ async function retrieveLocalContext(query, preferredFileIds = []) {
   }
 
   return chosen;
+}
+
+function expandQueryTokens(text) {
+  const tokens = tokenSet(text);
+  const groups = [
+    ["cost", "price", "pricing", "fee", "budget"],
+    ["error", "bug", "issue", "failure", "problem"],
+    ["result", "finding", "outcome", "conclusion"],
+    ["method", "procedure", "process", "steps"],
+    ["risk", "danger", "hazard", "safety"],
+    ["benefit", "advantage", "strength", "value"],
+    ["limit", "limitation", "weakness", "constraint"],
+    ["study", "research", "paper", "article", "evidence"],
+    ["author", "expert", "opinion", "view", "perspective"]
+  ];
+  for (const group of groups) {
+    if (group.some((word) => tokens.has(word))) group.forEach((word) => tokens.add(word));
+  }
+  return tokens;
 }
 
 function tokenSet(text) {
@@ -2559,7 +2606,7 @@ async function exportData() {
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
-  link.download = `picklo-v7.4-backup-${new Date().toISOString().slice(0, 10)}.json`;
+  link.download = `picklo-v8-backup-${new Date().toISOString().slice(0, 10)}.json`;
   document.body.appendChild(link);
   link.click();
   link.remove();

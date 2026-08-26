@@ -2,9 +2,9 @@
 
 <img src="assets/picklo-logo.svg" alt="Picklo" width="520">
 
-# Picklo V7.4
+# Picklo V8
 
-<img src="https://img.shields.io/badge/Release-V7.4.0-5F56C9?style=for-the-badge" alt="V7.4">
+<img src="https://img.shields.io/badge/Release-V8.0.0-5F56C9?style=for-the-badge" alt="V8">
 <img src="https://img.shields.io/badge/Agent-Private_Tools-2F8A5C?style=for-the-badge" alt="Private agent tools">
 <img src="https://img.shields.io/badge/Startup-Automatic-202020?style=for-the-badge" alt="Automatic startup">
 <img src="https://img.shields.io/badge/Inference-Web_Worker-5367E8?style=for-the-badge" alt="Web Worker">
@@ -18,6 +18,18 @@
 </div>
 
 ---
+
+## V8 contextual intelligence update
+
+Picklo V8 improves intelligence at the application layer while preserving private local inference.
+
+- **Context-aware follow-ups:** a compact dialogue-state packet identifies recent goals and helps resolve references such as “it,” “that,” “continue,” and “same as before.”
+- **Natural language nuance:** the model is explicitly guided to interpret idioms, figurative language, understatement, frustration and likely sarcasm from context.
+- **Structured reasoning:** complex requests are internally represented as goals, facts, constraints, unknowns and required outputs before the final answer is checked.
+- **Stronger inference:** analytical questions must consider a plausible alternative explanation and keep conclusions proportional to the available evidence.
+- **Broader knowledge retrieval:** synonym-based query expansion finds relevant passages even when a book, article or expert source uses different terminology from the question.
+- **Balanced sources:** conflicting expert views are represented fairly, with supplied primary or authoritative material preferred over unsupported claims.
+- **Honest scope:** V8 does not claim that a browser app has retrained its foundation model; users broaden its working knowledge by adding local books, articles and documents.
 
 ## V7.4 intelligence, startup and PWA update
 
