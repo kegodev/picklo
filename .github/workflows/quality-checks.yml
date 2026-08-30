@@ -20,8 +20,11 @@ jobs:
         run: |
           node --check app.js
           node --check agent-router.js
+          node --check runtime-policy.js
           node --check sw.js
           node --check webllm-worker.js
 
       - name: Run Picklo smoke checks
-        run: node tests/picklo-smoke.mjs
+        run: |
+          node tests/picklo-smoke.mjs
+          node tests/runtime-policy.mjs
