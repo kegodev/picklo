@@ -2,9 +2,9 @@
 
 <img src="assets/picklo-logo.svg" alt="Picklo" width="520">
 
-# Picklo V8
+# Picklo V8.1
 
-<img src="https://img.shields.io/badge/Release-V8.0.0-5F56C9?style=for-the-badge" alt="V8">
+<img src="https://img.shields.io/badge/Release-V8.1.0-5F56C9?style=for-the-badge" alt="V8.1">
 <img src="https://img.shields.io/badge/Agent-Private_Tools-2F8A5C?style=for-the-badge" alt="Private agent tools">
 <img src="https://img.shields.io/badge/Startup-Automatic-202020?style=for-the-badge" alt="Automatic startup">
 <img src="https://img.shields.io/badge/Inference-Web_Worker-5367E8?style=for-the-badge" alt="Web Worker">
@@ -18,6 +18,17 @@
 </div>
 
 ---
+
+## V8.1 answer consistency and mobile startup update
+
+Picklo V8.1 adapts local inference to the device and turns explicit user constraints into a checked response contract.
+
+- **Phone-adaptive models:** Balanced uses the capable 1B model on phones, while Quality uses 1.7B instead of forcing the 3B desktop default.
+- **Low-memory fallback:** when an automatically selected model cannot start, Picklo retries progressively lighter available models instead of leaving the chat unusable.
+- **Persistent manual override:** advanced users can still choose a model manually; the override remains until the Performance profile changes.
+- **Requirement checklist:** explicit instructions such as “must,” “only,” “include,” “avoid,” and bulleted constraints are carried into generation and final verification.
+- **Stable factual answers:** technical, analytical and constraint-heavy prompts use more deterministic sampling, while creative writing keeps its expressive settings.
+- **Targeted Balanced verification:** complex constrained, code, analytical and high-stakes answers receive a private correction pass without doubling every ordinary phone response.
 
 ## V8 contextual intelligence update
 

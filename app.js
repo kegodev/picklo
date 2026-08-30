@@ -1,7 +1,14 @@
 import * as webllm from "https://esm.run/@mlc-ai/web-llm";
 import { classifyAgentIntent } from "./agent-router.js";
+import {
+  detectRuntimeCapabilities,
+  extractExplicitRequirements,
+  getAdaptiveSampling,
+  getModelLoadCandidates,
+  recommendModelForDevice
+} from "./runtime-policy.js";
 
-const APP_VERSION = "8.0.0";
+const APP_VERSION = "8.1.0";
 const STORAGE_KEY = "picklo-v7-state";
 const V61_STORAGE_KEY = "picklo-v6.1-state";
 const FILE_DB = "picklo-v3-files";
@@ -57,7 +64,7 @@ const MODE_PROMPTS = {
 };
 
 const BASE_SYSTEM_PROMPT = `
-You are Picklo V8, a capable general-purpose personal AI assistant that runs locally in the user's browser.
+You are Picklo V8.1, a capable general-purpose personal AI assistant that runs locally in the user's browser.
 You are useful for questions, writing, coding, planning, brainstorming, explanations, decision support and document analysis.
 Do not claim to be ChatGPT, OpenAI, or another product. Identify yourself simply as Picklo when relevant.
 
@@ -89,6 +96,7 @@ const defaultState = () => ({
   defaultMode: "general",
   theme: "light",
   performanceProfile: "balanced",
+  modelPreference: "auto",
   autoTools: true,
   agentHistory: [],
   notes: [],
@@ -98,6 +106,7 @@ const defaultState = () => ({
 
 let state = loadState();
 let engine = null;
+let modelWorker = null;
 let loadedModelId = null;
 let isGenerating = false;
 let generationWasStopped = false;
@@ -344,6 +353,7 @@ function bindEvents() {
 
   modelSelect.addEventListener("change", () => {
     state.selectedModel = modelSelect.value;
+    state.modelPreference = "manual";
     saveState();
     if (loadedModelId && loadedModelId !== state.selectedModel) {
       loadModelBtn.textContent = "Switch to selected model";
@@ -373,6 +383,7 @@ function bindEvents() {
   });
 
   performanceSelect.addEventListener("change", async () => {
+    state.modelPreference = "auto";
     applyPerformanceProfile(performanceSelect.value, true, true);
     await loadSelectedModel({ automatic: true });
   });
@@ -511,6 +522,7 @@ function normalizeState(parsed) {
     ...defaultState(),
     ...parsed,
     performanceProfile: PERFORMANCE_PROFILES[parsed?.performanceProfile] ? parsed.performanceProfile : "balanced",
+    modelPreference: parsed?.modelPreference === "manual" ? "manual" : "auto",
     autoTools: typeof parsed?.autoTools === "boolean" ? parsed.autoTools : true,
     agentHistory: Array.isArray(parsed?.agentHistory) ? parsed.agentHistory.slice(0, 20) : [],
     notes: Array.isArray(parsed?.notes) ? parsed.notes : [],
@@ -1180,20 +1192,38 @@ function getPerformanceProfile() {
   return PERFORMANCE_PROFILES[state.performanceProfile] || PERFORMANCE_PROFILES.balanced;
 }
 
+function getAvailableModelIds() {
+  return [...modelSelect.options].map((option) => option.value).filter(Boolean);
+}
+
+function getRuntimeCapabilities() {
+  return detectRuntimeCapabilities({
+    deviceMemory: navigator.deviceMemory,
+    hardwareConcurrency: navigator.hardwareConcurrency,
+    userAgent: navigator.userAgent,
+    viewportWidth: window.innerWidth,
+    maxTouchPoints: navigator.maxTouchPoints,
+    coarsePointer: window.matchMedia?.("(pointer: coarse)")?.matches || false
+  });
+}
+
 function applyPerformanceProfile(profileName, persist = true, updateModel = true) {
   const normalized = PERFORMANCE_PROFILES[profileName] ? profileName : "fast";
   const profile = PERFORMANCE_PROFILES[normalized];
 
   state.performanceProfile = normalized;
-  performanceStatus.textContent = profile.label;
+  const capabilities = getRuntimeCapabilities();
+  performanceStatus.textContent = capabilities.isPhone
+    ? `${profile.label} • phone optimized`
+    : profile.label;
 
   if (performanceSelect) performanceSelect.value = normalized;
 
   if (updateModel) {
-    const available = [...modelSelect.options].some((option) => option.value === profile.preferredModel);
-    if (available) {
-      state.selectedModel = profile.preferredModel;
-      modelSelect.value = profile.preferredModel;
+    const recommended = recommendModelForDevice(normalized, getAvailableModelIds(), capabilities);
+    if (recommended) {
+      state.selectedModel = recommended;
+      modelSelect.value = recommended;
     }
   }
 
@@ -1209,14 +1239,17 @@ async function autoStartModel() {
     return;
   }
 
-  const profile = getPerformanceProfile();
-  const preferredAvailable = [...modelSelect.options].some(
-    (option) => option.value === profile.preferredModel
-  );
-
-  if (preferredAvailable) {
-    state.selectedModel = profile.preferredModel;
-    modelSelect.value = profile.preferredModel;
+  if (state.modelPreference !== "manual") {
+    const recommended = recommendModelForDevice(
+      state.performanceProfile,
+      getAvailableModelIds(),
+      getRuntimeCapabilities()
+    );
+    if (recommended) {
+      state.selectedModel = recommended;
+      modelSelect.value = recommended;
+      saveState();
+    }
   }
 
   return loadSelectedModel({ automatic: true });
@@ -1251,6 +1284,7 @@ function populateModels() {
     modelSelect.value = state.selectedModel;
   } else if (options[0]) {
     state.selectedModel = options[0].id;
+    state.modelPreference = "auto";
     modelSelect.value = options[0].id;
     saveState();
   }
@@ -1263,101 +1297,155 @@ function friendlyModelName(id) {
     .replaceAll("-", " ");
 }
 
+async function resetModelRuntime() {
+  const previousEngine = engine;
+  const previousWorker = modelWorker;
+  engine = null;
+  modelWorker = null;
+  loadedModelId = null;
+
+  try {
+    await previousEngine?.unload?.();
+  } catch (error) {
+    console.warn("Model cleanup was incomplete:", error);
+  }
+  previousWorker?.terminate();
+}
+
 async function loadSelectedModel(options = {}) {
   const { automatic = false } = options;
   const selected = modelSelect.value || state.selectedModel;
 
   if (!selected || isGenerating) return;
-  if (loadedModelId === selected && engine) return;
+  if (loadedModelId === selected && engine) return engine;
   if (modelLoadPromise) return modelLoadPromise;
 
   if (!("gpu" in navigator)) {
     setRuntime("WebGPU unavailable", "Use a WebGPU-capable browser", "error");
     if (!automatic) {
       closeSheets();
-      addError("WebGPU is unavailable in this browser. Picklo V8 needs a WebGPU-capable browser for local inference.");
+      addError("WebGPU is unavailable in this browser. Picklo V8.1 needs a WebGPU-capable browser for local inference.");
     }
     return;
   }
+
+  const profile = getPerformanceProfile();
+  const capabilities = getRuntimeCapabilities();
+  const allowFallback = state.modelPreference !== "manual";
+  const candidates = allowFallback
+    ? getModelLoadCandidates(selected, getAvailableModelIds())
+    : [selected];
+
+  if (!candidates.length) return;
 
   loadModelBtn.disabled = true;
   progressWrap.classList.remove("hidden");
   progressBar.style.width = "0%";
   progressPercent.textContent = "0%";
 
-  const profile = getPerformanceProfile();
   setRuntime(
     automatic ? "Starting automatically" : "Starting Picklo",
-    `${friendlyModelName(selected)} • ${profile.label}`,
+    `${friendlyModelName(selected)} • ${profile.label}${capabilities.isPhone ? " • phone optimized" : ""}`,
     "loading"
   );
 
   loadModelBtn.textContent = loadedModelId ? "Switching…" : "Loading…";
   messageInput.placeholder = "Picklo is starting in the background…";
 
+  let currentCandidate = selected;
   const onProgress = (report) => {
-    const text = report?.text || "Preparing Picklo…";
+    const reportText = report?.text || "Preparing Picklo…";
     const percent = typeof report?.progress === "number"
       ? Math.round(report.progress * 100)
-      : extractPercent(text) ?? 0;
+      : extractPercent(reportText) ?? 0;
+    const prefix = currentCandidate === selected
+      ? automatic ? "Starting automatically" : "Starting Picklo"
+      : "Trying a lighter model";
 
-    progressText.textContent = automatic ? `Starting automatically • ${text}` : text;
+    progressText.textContent = `${prefix} • ${reportText}`;
     progressPercent.textContent = `${percent}%`;
     progressBar.style.width = `${percent}%`;
   };
 
   modelLoadPromise = (async () => {
+    let lastError = null;
+
     try {
-      if (!engine) {
-        const worker = new Worker("./webllm-worker.js", { type: "module", name: "picklo-webllm" });
-        engine = await webllm.CreateWebWorkerMLCEngine(
-          worker,
-          selected,
-          {
-            initProgressCallback: onProgress,
-            appConfig: {
-              ...webllm.prebuiltAppConfig,
-              cacheBackend: "cache"
-            }
-          }
-        );
-      } else {
-        if (typeof engine.setInitProgressCallback === "function") {
-          engine.setInitProgressCallback(onProgress);
+      for (let index = 0; index < candidates.length; index += 1) {
+        currentCandidate = candidates[index];
+
+        if (index > 0) {
+          progressBar.style.width = "0%";
+          progressPercent.textContent = "0%";
+          progressText.textContent = `Trying a lighter model • ${friendlyModelName(currentCandidate)}`;
+          setRuntime(
+            "Optimizing for this device",
+            `Trying ${friendlyModelName(currentCandidate)}`,
+            "loading"
+          );
         }
-        await engine.reload(selected);
+
+        try {
+          if (!engine) {
+            modelWorker = new Worker("./webllm-worker.js", { type: "module", name: "picklo-webllm" });
+            engine = await webllm.CreateWebWorkerMLCEngine(
+              modelWorker,
+              currentCandidate,
+              {
+                initProgressCallback: onProgress,
+                appConfig: {
+                  ...webllm.prebuiltAppConfig,
+                  cacheBackend: "cache"
+                }
+              }
+            );
+          } else {
+            if (typeof engine.setInitProgressCallback === "function") {
+              engine.setInitProgressCallback(onProgress);
+            }
+            await engine.reload(currentCandidate);
+          }
+
+          loadedModelId = currentCandidate;
+          state.selectedModel = currentCandidate;
+          modelSelect.value = currentCandidate;
+          saveState();
+
+          progressBar.style.width = "100%";
+          progressPercent.textContent = "100%";
+          progressText.textContent = currentCandidate === selected
+            ? "Picklo is ready"
+            : "Picklo is ready with a lighter model";
+
+          const runtimeNotes = [profile.label];
+          if (capabilities.isPhone) runtimeNotes.push("phone optimized");
+          if (currentCandidate !== selected) runtimeNotes.push("lighter fallback");
+          setRuntime("Picklo is ready", `${friendlyModelName(currentCandidate)} • ${runtimeNotes.join(" • ")}`, "ready");
+
+          messageInput.disabled = false;
+          sendBtn.disabled = false;
+          messageInput.placeholder = "Message Picklo…";
+          loadModelBtn.textContent = "Model ready";
+
+          setTimeout(() => progressWrap.classList.add("hidden"), 700);
+          if (!automatic) setTimeout(closeSheets, 160);
+          messageInput.focus();
+          return engine;
+        } catch (error) {
+          lastError = error;
+          console.warn(`Could not start ${currentCandidate}:`, error);
+          await resetModelRuntime();
+        }
       }
 
-      loadedModelId = selected;
-      state.selectedModel = selected;
-      saveState();
-
-      progressBar.style.width = "100%";
-      progressPercent.textContent = "100%";
-      progressText.textContent = "Picklo is ready";
-
-      setRuntime("Picklo is ready", `${friendlyModelName(selected)} • ${profile.label}`, "ready");
-
-      messageInput.disabled = false;
-      sendBtn.disabled = false;
-      messageInput.placeholder = "Message Picklo…";
-      loadModelBtn.textContent = "Model ready";
-
-      setTimeout(() => progressWrap.classList.add("hidden"), 700);
-      if (!automatic) setTimeout(closeSheets, 160);
-      messageInput.focus();
-    } catch (error) {
-      console.error(error);
-      engine = null;
-      loadedModelId = null;
-
-      setRuntime("Picklo could not start", "Try Fast mode or another model", "error");
+      setRuntime("Picklo could not start", "This device may not have enough WebGPU memory", "error");
       loadModelBtn.textContent = "Try again";
       messageInput.placeholder = "Picklo could not start";
 
       if (!automatic) {
-        addError(`The selected model could not start. ${error?.message || String(error)}`);
+        addError(`The selected model could not start. ${lastError?.message || String(lastError)}`);
       }
+      return null;
     } finally {
       loadModelBtn.disabled = false;
       modelLoadPromise = null;
@@ -1506,11 +1594,12 @@ async function sendMessage() {
     let completionTokens = 0;
     const generationStartedAt = performance.now();
     const profile = getPerformanceProfile();
+    const sampling = getAdaptiveSampling(content, profile, state.activeMode);
 
     const stream = await engine.chat.completions.create({
       messages: buildModelMessages(chat, retrieved, route?.toolContext || "", requestedArtifact),
-      temperature: profile.temperature,
-      top_p: profile.topP || 0.9,
+      temperature: sampling.temperature,
+      top_p: sampling.topP,
       max_tokens: profile.maxTokens,
       stream: true,
       stream_options: { include_usage: true }
@@ -1539,7 +1628,7 @@ async function sendMessage() {
 
     if (!generationWasStopped && requestedArtifact) {
       fullReply = await repairArtifactIfNeeded(content, requestedArtifact, fullReply, profile);
-    } else if (!generationWasStopped && profile.verify && shouldReviewAnswer(content)) {
+    } else if (!generationWasStopped && shouldVerifyAnswer(content, profile)) {
       fullReply = await reviewAnswer(content, fullReply, profile);
     }
 
@@ -1694,6 +1783,13 @@ function buildDialogueState(chat, latestInput) {
 function buildResponseContract(input, retrieved, requestedArtifact) {
   const text = String(input || "");
   const rules = ["RESPONSE CONTRACT:", "- Answer the current request directly and return only the final response."];
+  const explicitRequirements = extractExplicitRequirements(text);
+
+  if (explicitRequirements.length) {
+    rules.push("- Treat every item in this requirement checklist as binding unless it conflicts with safety or a later instruction:");
+    explicitRequirements.forEach((requirement) => rules.push(`  - ${requirement}`));
+    rules.push("- Before returning, silently confirm that the answer satisfies every applicable checklist item.");
+  }
 
   if (/\b(?:calculate|solve|equation|percent|percentage|total|average|convert)\b/i.test(text)) {
     rules.push("- Preserve exact deterministic results and verify units, signs, percentages and rounding.");
@@ -1737,8 +1833,23 @@ function selectConversationMessages(chat, profile) {
 function shouldReviewAnswer(input) {
   const text = String(input || "");
   if (text.length >= 90) return true;
+  if (extractExplicitRequirements(text).length >= 2) return true;
   if (["code", "analyze"].includes(state.activeMode)) return true;
   return /\b(?:compare|evaluate|explain|why|plan|strategy|medical|legal|financial|research|debug|build|analyze)\b/i.test(text);
+}
+
+function shouldVerifyAnswer(input, profile) {
+  if (!shouldReviewAnswer(input)) return false;
+  if (profile.verify) return true;
+  if (state.performanceProfile !== "balanced") return false;
+
+  const text = String(input || "");
+  const highRiskOrTechnical = ["code", "analyze"].includes(state.activeMode) ||
+    /\b(?:medical|legal|financial|security|privacy|research|debug|code|api|sql|calculate)\b/i.test(text);
+  const requirementCount = extractExplicitRequirements(text).length;
+
+  if (highRiskOrTechnical || requirementCount >= 2) return true;
+  return !getRuntimeCapabilities().isPhone && text.length >= 140;
 }
 
 async function reviewAnswer(input, draft, profile) {
@@ -1748,9 +1859,12 @@ async function reviewAnswer(input, draft, profile) {
       messages: [
         {
           role: "system",
-          content: "You are Picklo's final-answer verifier. Silently inspect the draft for factual overconfidence, contradictions, missed requirements, unsafe advice, calculation errors and incomplete code. Return a corrected final answer only. Preserve correct content and do not mention reviewing, tools, policies or internal reasoning."
+          content: "You are Picklo's final-answer verifier. Silently inspect the draft for factual overconfidence, contradictions, missed requirements, unsafe advice, calculation errors and incomplete code. Enforce the supplied response contract exactly. Return a corrected final answer only. Preserve correct content and do not mention reviewing, tools, policies or internal reasoning."
         },
-        { role: "user", content: `Original request:\n${input}\n\nDraft answer:\n${draft}` }
+        {
+          role: "user",
+          content: `Original request:\n${input}\n\n${buildResponseContract(input, [], null)}\n\nDraft answer:\n${draft}`
+        }
       ],
       temperature: 0.1,
       top_p: 0.8,

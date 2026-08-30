@@ -5,13 +5,13 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <meta name="theme-color" content="#fbfaf8" media="(prefers-color-scheme: light)" />
   <meta name="theme-color" content="#141714" media="(prefers-color-scheme: dark)" />
-  <meta name="description" content="Picklo V8 — a contextual, capable and private local-first AI assistant." />
+  <meta name="description" content="Picklo V8.1 — consistent answers and phone-adaptive private local AI." />
   <meta name="application-name" content="Picklo" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-title" content="Picklo" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="mobile-web-app-capable" content="yes" />
-  <title>Picklo V8</title>
+  <title>Picklo V8.1</title>
   <link rel="preconnect" href="https://esm.run" crossorigin />
   <link rel="preconnect" href="https://huggingface.co" crossorigin />
   <link rel="modulepreload" href="https://esm.run/@mlc-ai/web-llm" />
@@ -22,6 +22,7 @@
   <link rel="stylesheet" href="styles.css" />
   <link rel="modulepreload" href="app.js" />
   <link rel="modulepreload" href="agent-router.js" />
+  <link rel="modulepreload" href="runtime-policy.js" />
 </head>
 <body>
   <div class="app">
@@ -105,7 +106,7 @@
           <div class="chat-heading">
             <div class="chat-title-line">
               <h1 id="headerChatTitle">New chat</h1>
-              <span class="version">V8</span>
+              <span class="version">V8.1</span>
             </div>
             <div class="chat-status">
               <span id="assistantSubtitle">Local, private and ready</span>
@@ -241,16 +242,16 @@
         <label class="field-label" for="performanceSelect">Performance</label>
         <select class="select-field" id="performanceSelect">
           <option value="fast">Fast — quickest capable model</option>
-          <option value="balanced">Balanced — recommended</option>
+          <option value="balanced">Balanced — recommended, device adaptive</option>
           <option value="quality">Quality — strongest with answer verification</option>
         </select>
-        <p class="help-text">Picklo starts loading immediately and keeps model files cached for faster home-screen launches. Quality mode uses more memory and verifies complex answers with a second pass.</p>
+        <p class="help-text">Picklo chooses a phone-friendly model automatically, falls back to a lighter model if memory is tight, and keeps model files cached. Balanced and Quality add targeted answer checks.</p>
       </div>
 
       <div class="setting-group">
         <label class="field-label" for="modelSelect">Local model</label>
         <select class="select-field" id="modelSelect"></select>
-        <p class="help-text">Advanced override. Changing the model manually can make responses slower.</p>
+        <p class="help-text">Advanced override. Picklo otherwise selects a model for this device; a manual choice stays selected until you change Performance.</p>
         <button class="primary-action" id="loadModelBtn" type="button">Switch model now</button>
       </div>
 
@@ -323,7 +324,7 @@
   <section class="sheet tools-sheet hidden" id="toolsSheet" role="dialog" aria-modal="true" aria-labelledby="toolsTitle">
     <div class="sheet-handle"></div>
     <header class="sheet-header">
-      <div><span class="eyebrow">PICKLO V8</span><h2 id="toolsTitle">Tools</h2><p>Local utilities that work without a Picklo backend.</p></div>
+      <div><span class="eyebrow">PICKLO V8.1</span><h2 id="toolsTitle">Tools</h2><p>Local utilities that work without a Picklo backend.</p></div>
       <button class="sheet-close" data-close-sheet type="button">×</button>
     </header>
     <div class="sheet-body">
@@ -355,7 +356,7 @@
 
       <section class="tool-panel hidden" data-tool-panel="code">
         <div class="tool-panel-title"><div><strong>JavaScript sandbox</strong><span>Runs in an isolated sandboxed iframe.</span></div><button class="tool-run" id="codeRunBtn" type="button">Run</button></div>
-        <textarea class="code-runner-input" id="codeRunnerInput" spellcheck="false">console.log("Hello from Picklo V8");
+        <textarea class="code-runner-input" id="codeRunnerInput" spellcheck="false">console.log("Hello from Picklo V8.1");
 return 2 + 2;</textarea>
         <pre class="code-output" id="codeOutput">Ready.</pre>
       </section>
@@ -395,7 +396,7 @@ return 2 + 2;</textarea>
         </button>
         <label for="importDataInput">
           <strong>Import Picklo</strong>
-          <span>Restore a Picklo V8 JSON backup.</span>
+          <span>Restore a Picklo V8.1 JSON backup.</span>
           <input id="importDataInput" type="file" hidden accept=".json,application/json" />
         </label>
       </div>
