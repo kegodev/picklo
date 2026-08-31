@@ -1,9 +1,21 @@
 const FILE_WORDS = /\b(file|files|document|documents|pdf|uploaded|upload|attachment|attached)\b/i;
+const KM_DIGITAL_LABS_PATTERN = /\bkm\s*d(?:igi|i)tal\s*labs?\b/i;
 
 export function classifyAgentIntent(input, options = {}) {
   const text = String(input || "").trim();
   const hasFiles = Boolean(options.hasFiles);
   if (!text) return null;
+
+  const asksAboutPickloCreator =
+    /\bpicklo\b/i.test(text) &&
+    /\b(?:who|which|what)\b/i.test(text) &&
+    /\b(?:created|creator|made|founded|founder|designed|designer|developed|developer|built|behind|owns?|owner)\b/i.test(text);
+  if (asksAboutPickloCreator) return { type: "picklo_identity" };
+
+  const asksAboutKmDigitalLabs =
+    KM_DIGITAL_LABS_PATTERN.test(text) &&
+    /\b(?:who|what|about|information|company|services?|does|tell|explain)\b/i.test(text);
+  if (asksAboutKmDigitalLabs) return { type: "km_digital_labs" };
 
   const remember = text.match(/^\s*remember(?:\s+that)?\s+(.+)/is);
   if (remember?.[1]?.trim()) return { type: "memory_save", value: remember[1].trim() };
