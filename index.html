@@ -23,9 +23,42 @@
   <link rel="modulepreload" href="app.js" />
   <link rel="modulepreload" href="agent-router.js" />
   <link rel="modulepreload" href="runtime-policy.js" />
+  <link rel="modulepreload" href="supabase-client.js" />
 </head>
 <body>
-  <div class="app">
+  <section class="auth-gate" id="authGate" aria-labelledby="authTitle">
+    <div class="auth-card">
+      <div class="auth-brand">
+        <img src="assets/picklo-mark.svg" alt="" />
+        <span>Picklo</span>
+      </div>
+      <div class="auth-copy">
+        <span class="eyebrow">YOUR PERSONAL AI</span>
+        <h1 id="authTitle">Sign in to use Picklo</h1>
+        <p>Your conversations are saved to your private account and follow you across devices.</p>
+      </div>
+
+      <div class="auth-tabs" role="tablist" aria-label="Account action">
+        <button class="active" id="authSignInTab" type="button" role="tab" aria-selected="true">Sign in</button>
+        <button id="authSignUpTab" type="button" role="tab" aria-selected="false">Create account</button>
+      </div>
+
+      <form class="auth-form" id="authForm">
+        <label for="authEmail">Email address</label>
+        <input id="authEmail" type="email" autocomplete="email" maxlength="320" required placeholder="you@example.com" />
+
+        <label for="authPassword">Password</label>
+        <input id="authPassword" type="password" autocomplete="current-password" minlength="6" maxlength="128" required placeholder="At least 6 characters" />
+
+        <button class="auth-submit" id="authSubmitBtn" type="submit">Sign in</button>
+        <p class="auth-message" id="authMessage" role="status" aria-live="polite"></p>
+      </form>
+
+      <p class="auth-privacy">Messages sync securely. Picklo's AI model and attached file text still run on this device.</p>
+    </div>
+  </section>
+
+  <div class="app" id="appRoot" hidden>
 
     <aside class="sidebar">
       <div class="sidebar-header">
@@ -136,6 +169,10 @@
             </svg>
           </button>
 
+          <button class="account-button" id="accountBtn" type="button" aria-label="Open account settings" title="Account">
+            <span id="accountInitial">U</span>
+          </button>
+
           <button class="header-new" id="headerNewChatBtn" type="button" aria-label="New chat">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
           </button>
@@ -199,7 +236,7 @@
         </div>
 
         <div class="composer-footer">
-          <span id="composerNote">Agent tools, chats, memory and files stay in this browser.</span>
+          <span id="composerNote">Chats sync to your account. Models and attached file text stay on this device.</span>
           <span>Picklo can make mistakes. Check important information.</span>
         </div>
       </form>
@@ -229,6 +266,15 @@
       <button class="sheet-close" data-close-sheet type="button">×</button>
     </header>
     <div class="sheet-body">
+      <div class="setting-group account-setting">
+        <span class="field-label">Signed-in account</span>
+        <div class="account-summary">
+          <div class="account-avatar" id="settingsAccountInitial">U</div>
+          <div><strong id="accountEmail">Signed in</strong><span id="cloudSyncStatus">Loading your conversations…</span></div>
+        </div>
+        <button class="secondary-action full" id="signOutBtn" type="button">Sign out</button>
+      </div>
+
       <div class="setting-group">
         <label class="field-label" for="autoToolsSelect">Agent tools</label>
         <select class="select-field" id="autoToolsSelect">

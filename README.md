@@ -23,6 +23,10 @@
 
 Picklo V8.1 adapts local inference to the device and turns explicit user constraints into a checked response contract.
 
+- **Required accounts:** users sign in or create an account with Supabase Auth before Picklo starts.
+- **Per-user cloud chats:** conversations and messages sync through dedicated Picklo tables in the existing 015 Closet Supabase project.
+- **Private row access:** row-level security limits every conversation and message to its authenticated owner.
+- **Store isolation:** Picklo uses separate tables and does not read or change 015 Closet products, orders, customers or inventory.
 - **Phone-adaptive models:** Balanced uses the capable 1B model on phones, while Quality uses 1.7B instead of forcing the 3B desktop default.
 - **Low-memory fallback:** when an automatically selected model cannot start, Picklo retries progressively lighter available models instead of leaving the chat unusable.
 - **Persistent manual override:** advanced users can still choose a model manually; the override remains until the Performance profile changes.
@@ -46,7 +50,7 @@ Picklo V8 improves intelligence at the application layer while preserving privat
 
 Picklo V7.4 strengthens the local assistant while keeping the app responsive on ordinary devices.
 
-- **Earlier model warmup:** model hydration begins as soon as the application module starts, before local files and the rest of the interface finish initializing.
+- **Authenticated model warmup:** model hydration starts automatically after the signed-in session and private conversations are restored.
 - **Persistent model cache:** Picklo requests persistent browser storage and reuses WebLLM model files on later visits and home-screen launches.
 - **Stronger defaults:** Fast uses a capable 1B model, Balanced uses 1.7B, and Quality uses the strongest preferred 3B model.
 - **Quality verification:** complex answers in Quality mode receive a private second-pass review for missed requirements, contradictions, unsafe advice and incomplete code.
@@ -259,6 +263,8 @@ picklo-v7.4/
 ├── app.js
 ├── index.html
 ├── manifest.webmanifest
+├── runtime-policy.js
+├── supabase-client.js
 ├── styles.css
 ├── sw.js
 ├── webllm-worker.js
@@ -289,6 +295,10 @@ V7.1 Faster startup, caching and streaming
 V7.2 More accurate answers and private processing
  ↓
 V7.4 Stronger reasoning, verified files and installable app icons
+ ↓
+V8 Contextual intelligence
+ ↓
+V8.1 Account sync, consistent answers and phone-adaptive startup
 ```
 
 ## Boundaries
@@ -301,7 +311,9 @@ It does not automatically:
 - access the operating-system filesystem;
 - execute shell commands;
 - execute JavaScript without explicit user confirmation;
-- send local data to external services.
+- send prompts or attached file contents to a remote AI model.
+
+Conversation titles and messages are intentionally synced to Supabase for the signed-in user. Model inference, uploaded file text, memories, notes and downloaded model files remain on the device.
 
 The agent layer is intentionally constrained.
 
