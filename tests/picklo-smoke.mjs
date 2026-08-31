@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { readFileSync, statSync } from "node:fs";
+import { classifyAgentIntent } from "../agent-router.js";
 
 const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
 const app = read("app.js");
@@ -13,9 +14,16 @@ const supabaseClient = read("supabase-client.js");
 assert.match(app, /APP_VERSION = "8\.1\.0"/);
 assert.match(html, /Picklo V8\.1/);
 assert.match(html, /class="copyright-card"/);
-assert.equal((html.match(/KM Digital Labs/g) || []).length, 2, "Ownership should appear only in the Settings copyright card");
-assert.doesNotMatch(app, /KM Digital Labs/);
+assert.equal((html.match(/KM Digital Labs/g) || []).length, 1, "Visible ownership should stay in the Settings copyright card");
+assert.match(html, /Picklo was founded, designed and is owned by KM Digital Labs/);
+assert.match(app, /Picklo's founding company, designer, developer and owner is KM Digital Labs/);
+assert.match(app, /help@kmdigitallabs\.co\.za/);
 assert.doesNotMatch(JSON.stringify(manifest), /KM Digital Labs/);
+assert.deepEqual(classifyAgentIntent("Who founded Picklo?"), { type: "picklo_identity" });
+assert.deepEqual(classifyAgentIntent("Tell me about KM Digital Labs"), { type: "km_digital_labs" });
+assert.deepEqual(classifyAgentIntent("Who designed Picklo?"), { type: "picklo_identity" });
+assert.equal(classifyAgentIntent("Who founded Microsoft?"), null);
+assert.equal(classifyAgentIntent("Create a website for KM Digital Labs"), null);
 
 assert.equal(manifest.name, "Picklo");
 assert.ok(manifest.icons.some((icon) => icon.sizes === "192x192" && /maskable/.test(icon.purpose)));
@@ -35,7 +43,7 @@ assert.match(app, /extractExplicitRequirements/);
 assert.match(app, /getAdaptiveSampling/);
 assert.match(app, /getModelLoadCandidates/);
 assert.match(runtimePolicy, /recommendModelForDevice/);
-assert.match(serviceWorker, /picklo-v8\.1-shell-v2/);
+assert.match(serviceWorker, /picklo-v8\.1-shell-v3/);
 assert.match(serviceWorker, /runtime-policy\.js/);
 assert.match(serviceWorker, /supabase-client\.js/);
 assert.match(app, /signInWithPassword/);
