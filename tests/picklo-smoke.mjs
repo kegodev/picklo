@@ -8,6 +8,7 @@ const styles = read("styles.css");
 const manifest = JSON.parse(read("manifest.webmanifest"));
 const serviceWorker = read("sw.js");
 const runtimePolicy = read("runtime-policy.js");
+const supabaseClient = read("supabase-client.js");
 
 assert.match(app, /APP_VERSION = "8\.1\.0"/);
 assert.match(html, /Picklo V8\.1/);
@@ -34,8 +35,17 @@ assert.match(app, /extractExplicitRequirements/);
 assert.match(app, /getAdaptiveSampling/);
 assert.match(app, /getModelLoadCandidates/);
 assert.match(runtimePolicy, /recommendModelForDevice/);
-assert.match(serviceWorker, /picklo-v8\.1-shell-v1/);
+assert.match(serviceWorker, /picklo-v8\.1-shell-v2/);
 assert.match(serviceWorker, /runtime-policy\.js/);
+assert.match(serviceWorker, /supabase-client\.js/);
+assert.match(app, /signInWithPassword/);
+assert.match(app, /picklo_conversations/);
+assert.match(app, /picklo_messages/);
+assert.match(html, /id="authGate"/);
+assert.match(html, /id="signOutBtn"/);
+assert.match(supabaseClient, /@supabase\/supabase-js@2\.112\.4/);
+assert.match(supabaseClient, /sb_publishable_/);
+assert.doesNotMatch(supabaseClient, /service_role|sb_secret_/);
 assert.match(styles, /Final V7\.4 cascade safeguards/);
 
 console.log("Picklo V8.1 smoke checks passed.");
