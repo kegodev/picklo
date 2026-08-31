@@ -7,9 +7,10 @@ const html = read("index.html");
 const styles = read("styles.css");
 const manifest = JSON.parse(read("manifest.webmanifest"));
 const serviceWorker = read("sw.js");
+const runtimePolicy = read("runtime-policy.js");
 
-assert.match(app, /APP_VERSION = "8\.0\.0"/);
-assert.match(html, /Picklo V8/);
+assert.match(app, /APP_VERSION = "8\.1\.0"/);
+assert.match(html, /Picklo V8\.1/);
 assert.match(html, /class="copyright-card"/);
 assert.equal((html.match(/KM Digital Labs/g) || []).length, 2, "Ownership should appear only in the Settings copyright card");
 assert.doesNotMatch(app, /KM Digital Labs/);
@@ -29,7 +30,12 @@ assert.match(app, /documentFrequency/);
 assert.match(app, /buildDialogueState/);
 assert.match(app, /expandQueryTokens/);
 assert.match(app, /alternative explanation/);
-assert.match(serviceWorker, /picklo-v8-shell-v1/);
+assert.match(app, /extractExplicitRequirements/);
+assert.match(app, /getAdaptiveSampling/);
+assert.match(app, /getModelLoadCandidates/);
+assert.match(runtimePolicy, /recommendModelForDevice/);
+assert.match(serviceWorker, /picklo-v8\.1-shell-v1/);
+assert.match(serviceWorker, /runtime-policy\.js/);
 assert.match(styles, /Final V7\.4 cascade safeguards/);
 
-console.log("Picklo V8 smoke checks passed.");
+console.log("Picklo V8.1 smoke checks passed.");

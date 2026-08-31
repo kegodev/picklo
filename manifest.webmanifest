@@ -1,7 +1,7 @@
 {
   "name": "Picklo",
   "short_name": "Picklo",
-  "description": "Picklo V8 \u2014 a contextual, capable and private local-first AI assistant.",
+  "description": "Picklo V8.1 \u2014 consistent answers and phone-adaptive private local AI.",
   "id": "./",
   "start_url": "./",
   "scope": "./",
