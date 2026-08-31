@@ -27,6 +27,7 @@ Picklo V8.1 adapts local inference to the device and turns explicit user constra
 - **Per-user cloud chats:** conversations and messages sync through dedicated Picklo tables in the existing 015 Closet Supabase project.
 - **Private row access:** row-level security limits every conversation and message to its authenticated owner.
 - **Store isolation:** Picklo uses separate tables and does not read or change 015 Closet products, orders, customers or inventory.
+- **Grounded product identity:** Picklo accurately identifies KM Digital Labs as its founder, designer, developer and owner, and can summarize the company's verified services when asked.
 - **Phone-adaptive models:** Balanced uses the capable 1B model on phones, while Quality uses 1.7B instead of forcing the 3B desktop default.
 - **Low-memory fallback:** when an automatically selected model cannot start, Picklo retries progressively lighter available models instead of leaving the chat unusable.
 - **Persistent manual override:** advanced users can still choose a model manually; the override remains until the Performance profile changes.
