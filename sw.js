@@ -1,4 +1,4 @@
-const CACHE = "picklo-v8.1-shell-v1";
+const CACHE = "picklo-v8.1-shell-v3";
 const SHELL = [
   "./",
   "./index.html",
@@ -6,6 +6,7 @@ const SHELL = [
   "./app.js",
   "./agent-router.js",
   "./runtime-policy.js",
+  "./supabase-client.js",
   "./webllm-worker.js",
   "./manifest.webmanifest",
   "./assets/picklo-mark.svg",

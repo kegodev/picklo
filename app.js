@@ -1,5 +1,6 @@
 import * as webllm from "https://esm.run/@mlc-ai/web-llm";
 import { classifyAgentIntent } from "./agent-router.js";
+import { supabase } from "./supabase-client.js";
 import {
   detectRuntimeCapabilities,
   extractExplicitRequirements,
@@ -15,6 +16,8 @@ const FILE_DB = "picklo-v3-files";
 const FILE_STORE = "documents";
 const MAX_FILE_CHARS = 400000;
 const MAX_CONTEXT_CHARS = 10000;
+const USER_STATE_PREFIX = `${STORAGE_KEY}:user`;
+const CLOUD_SYNC_DELAY = 450;
 
 const PREFERRED_MODELS = [
   { id: "Llama-3.2-1B-Instruct-q4f16_1-MLC", label: "Llama 3.2 1B", note: "Fast" },
@@ -63,10 +66,26 @@ const MODE_PROMPTS = {
   analyze: "Separate evidence, assumptions, uncertainty, and conclusions. Use supplied documents as the primary evidence and identify which file supports important claims."
 };
 
+const KM_DIGITAL_LABS_REPLY = `
+**Picklo was founded, designed and developed by KM Digital Labs.**
+
+KM Digital Labs is a South African digital technology company that creates websites, web applications, online stores, educational platforms, AI tools, interactive simulators and digital products.
+
+Website: [kmdigitallabs.co.za](https://kmdigitallabs.co.za)
+Support: [help@kmdigitallabs.co.za](mailto:help@kmdigitallabs.co.za)
+`.trim();
+
 const BASE_SYSTEM_PROMPT = `
 You are Picklo V8.1, a capable general-purpose personal AI assistant that runs locally in the user's browser.
 You are useful for questions, writing, coding, planning, brainstorming, explanations, decision support and document analysis.
 Do not claim to be ChatGPT, OpenAI, or another product. Identify yourself simply as Picklo when relevant.
+
+IDENTITY AND COMPANY KNOWLEDGE:
+- Picklo's founding company, designer, developer and owner is KM Digital Labs.
+- KM Digital Labs is a South African digital technology company that creates websites, web applications, online stores, educational platforms, AI tools, interactive simulators and digital products.
+- Its official website is https://kmdigitallabs.co.za and its support email is help@kmdigitallabs.co.za.
+- When asked who founded, created, made, designed, developed or owns Picklo, answer directly that KM Digital Labs did.
+- Do not infer a person's name as the founder of KM Digital Labs. Do not invent staff, dates, addresses, clients, awards or company claims that are not listed here or supplied by the user.
 
 GENERAL RULES:
 1. Answer the user's actual request directly.
@@ -82,7 +101,7 @@ GENERAL RULES:
 11. Return the finished answer only. Mention a tool action only when a downloadable file was actually created for the user.
 12. Follow the latest user instruction when it conflicts with an earlier request, while preserving still-relevant conversation context.
 13. For decisions, distinguish facts from recommendations. For high-stakes medical, legal or financial topics, be careful, transparent about limits, and encourage professional verification when appropriate.
-14. Do not add ownership, company or creator branding to normal responses.
+14. Do not add ownership, company or creator branding to unrelated responses. Give the verified identity and company information above when the user asks about Picklo's creator, founder, designer, developer, owner or KM Digital Labs.
 15. Interpret language in context. Resolve pronouns and follow-up references from the conversation before answering. Recognize common idioms, understatement, figurative language and likely sarcasm; when ambiguity would materially change the answer, ask one concise clarifying question instead of guessing.
 16. For complex requests, silently form a short problem representation: the goal, supplied facts, constraints, unknowns and required output. Test the answer against those items before returning it.
 17. When sources or expert views disagree, represent the meaningful disagreement fairly. Prefer supplied primary or authoritative material and distinguish source evidence from inference.
@@ -114,8 +133,34 @@ let localFiles = [];
 let activeFileSources = [];
 let modelLoadPromise = null;
 let lastGenerationStats = null;
+let currentUser = null;
+let loadedUserId = null;
+let sessionLoadPromise = null;
+let authMode = "sign-in";
+let appEventsBound = false;
+let cloudSyncPaused = true;
+let cloudSyncTimer = null;
+let cloudSyncChain = Promise.resolve();
+let lastCloudSnapshot = "";
 
 const $ = (id) => document.getElementById(id);
+
+const appRoot = $("appRoot");
+const authGate = $("authGate");
+const authForm = $("authForm");
+const authEmail = $("authEmail");
+const authPassword = $("authPassword");
+const authSubmitBtn = $("authSubmitBtn");
+const authSignInTab = $("authSignInTab");
+const authSignUpTab = $("authSignUpTab");
+const authMessage = $("authMessage");
+const authTitle = $("authTitle");
+const accountBtn = $("accountBtn");
+const accountInitial = $("accountInitial");
+const settingsAccountInitial = $("settingsAccountInitial");
+const accountEmail = $("accountEmail");
+const cloudSyncStatus = $("cloudSyncStatus");
+const signOutBtn = $("signOutBtn");
 
 const newChatBtn = $("newChatBtn");
 const mobileNewChatBtn = $("mobileNewChatBtn");
@@ -219,37 +264,195 @@ boot();
 
 async function boot() {
   applyTheme(state.theme || "light", false);
+  bindAuthEvents();
+  registerPickloServiceWorker();
+
+  const { data, error } = await supabase.auth.getSession();
+  if (error) setAuthMessage(error.message);
+  await handleAuthSession(data?.session || null);
+
+  supabase.auth.onAuthStateChange((_event, session) => {
+    setTimeout(() => {
+      handleAuthSession(session).catch((sessionError) => {
+        console.error("Picklo session update failed:", sessionError);
+        setAuthMessage(sessionError?.message || "Could not open your Picklo account.");
+      });
+    }, 0);
+  });
+}
+
+function bindAuthEvents() {
+  authSignInTab.addEventListener("click", () => setAuthMode("sign-in"));
+  authSignUpTab.addEventListener("click", () => setAuthMode("sign-up"));
+  authForm.addEventListener("submit", handleAuthSubmit);
+  signOutBtn.addEventListener("click", async () => {
+    signOutBtn.disabled = true;
+    try {
+      const { error } = await supabase.auth.signOut();
+      if (error) throw error;
+    } catch (error) {
+      setCloudSyncStatus(error?.message || "Could not sign out.", true);
+    } finally {
+      signOutBtn.disabled = false;
+    }
+  });
+}
+
+function setAuthMode(mode) {
+  authMode = mode === "sign-up" ? "sign-up" : "sign-in";
+  const signingUp = authMode === "sign-up";
+  authSignInTab.classList.toggle("active", !signingUp);
+  authSignUpTab.classList.toggle("active", signingUp);
+  authSignInTab.setAttribute("aria-selected", String(!signingUp));
+  authSignUpTab.setAttribute("aria-selected", String(signingUp));
+  authTitle.textContent = signingUp ? "Create your Picklo account" : "Sign in to use Picklo";
+  authSubmitBtn.textContent = signingUp ? "Create account" : "Sign in";
+  authPassword.autocomplete = signingUp ? "new-password" : "current-password";
+  setAuthMessage("");
+}
+
+async function handleAuthSubmit(event) {
+  event.preventDefault();
+  const email = authEmail.value.trim();
+  const password = authPassword.value;
+  if (!email || password.length < 6) return;
+
+  setAuthBusy(true);
+  setAuthMessage("");
+
+  try {
+    if (authMode === "sign-up") {
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: { emailRedirectTo: new URL("./", window.location.href).href }
+      });
+      if (error) throw error;
+      authPassword.value = "";
+      if (!data.session) {
+        setAuthMessage("Check your email to confirm the account, then sign in.", true);
+      }
+    } else {
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) throw error;
+      authPassword.value = "";
+    }
+  } catch (error) {
+    setAuthMessage(error?.message || "Authentication failed. Please try again.");
+  } finally {
+    setAuthBusy(false);
+  }
+}
+
+function setAuthBusy(busy) {
+  authSubmitBtn.disabled = busy;
+  authSignInTab.disabled = busy;
+  authSignUpTab.disabled = busy;
+  if (busy) authSubmitBtn.textContent = authMode === "sign-up" ? "Creating account…" : "Signing in…";
+  else authSubmitBtn.textContent = authMode === "sign-up" ? "Create account" : "Sign in";
+}
+
+function setAuthMessage(message, success = false) {
+  authMessage.textContent = message || "";
+  authMessage.classList.toggle("success", Boolean(success));
+}
+
+async function handleAuthSession(session) {
+  const user = session?.user || null;
+  if (!user) {
+    currentUser = null;
+    loadedUserId = null;
+    cloudSyncPaused = true;
+    if (cloudSyncTimer) clearTimeout(cloudSyncTimer);
+    cloudSyncTimer = null;
+    lastCloudSnapshot = "";
+    state = normalizeState({ ...state, activeChatId: null, chats: [] });
+    if (appEventsBound) closeSheets();
+    appRoot.hidden = true;
+    authGate.hidden = false;
+    setAuthMode("sign-in");
+    authEmail.focus();
+    return;
+  }
+
+  if (loadedUserId === user.id && !appRoot.hidden) {
+    currentUser = user;
+    renderAccount();
+    return;
+  }
+  if (loadedUserId === user.id && sessionLoadPromise) return sessionLoadPromise;
+
+  currentUser = user;
+  loadedUserId = user.id;
+  authGate.hidden = false;
+  appRoot.hidden = true;
+  setAuthMessage("Loading your conversations…", true);
+  sessionLoadPromise = startAuthenticatedApp(user).finally(() => {
+    sessionLoadPromise = null;
+  });
+  return sessionLoadPromise;
+}
+
+async function startAuthenticatedApp(user) {
+  cloudSyncPaused = true;
+  state = loadStateForUser(user.id);
+  applyTheme(state.theme || "light", false);
   populateModels();
   applyPerformanceProfile(state.performanceProfile || "balanced", false, false);
 
-  // Begin model hydration at the earliest safe moment. The model files are cached by
-  // WebLLM, so later PWA launches can reuse them instead of downloading them again.
-  const earlyModelWarmup = autoStartModel().catch((error) => {
-    console.warn("Early model warmup failed:", error);
-    return null;
-  });
+  if (!appEventsBound) {
+    bindEvents();
+    appEventsBound = true;
+  }
+
+  localFiles = await listLocalFiles();
+  let cloudLoaded = false;
+  try {
+    await loadChatsFromCloud();
+    cloudLoaded = true;
+    setCloudSyncStatus("Conversations saved to your account");
+  } catch (error) {
+    console.error("Picklo conversation load failed:", error);
+    setCloudSyncStatus("Cloud sync unavailable — changes will retry", true);
+  }
 
   ensureActiveChat();
-  localFiles = await listLocalFiles();
-  bindEvents();
-
   defaultModeSelect.value = state.defaultMode || "general";
   themeSelect.value = state.theme || "light";
   performanceSelect.value = state.performanceProfile || "balanced";
   autoToolsSelect.value = state.autoTools === false ? "off" : "on";
   renderAgentHistory();
+  renderAccount();
 
-  // V7 allows typing immediately. Safe local tools can answer while the model starts.
   messageInput.disabled = false;
   sendBtn.disabled = false;
   messageInput.placeholder = "Message Picklo…";
 
   setMode(state.activeMode || state.defaultMode || "general", false);
   renderAll();
+  appRoot.hidden = false;
+  authGate.hidden = true;
+  setAuthMessage("");
 
-  registerPickloServiceWorker();
+  cloudSyncPaused = false;
+  if (!cloudLoaded) lastCloudSnapshot = "";
+  saveState();
+
   preserveLocalModelCache();
-  await Promise.resolve(earlyModelWarmup);
+  autoStartModel().catch((error) => console.warn("Authenticated model warmup failed:", error));
+}
+
+function renderAccount() {
+  const email = currentUser?.email || "Signed-in user";
+  const initial = email.trim().charAt(0).toUpperCase() || "U";
+  accountEmail.textContent = email;
+  accountInitial.textContent = initial;
+  settingsAccountInitial.textContent = initial;
+}
+
+function setCloudSyncStatus(message, isError = false) {
+  cloudSyncStatus.textContent = message;
+  cloudSyncStatus.dataset.state = isError ? "error" : "ready";
 }
 
 function registerPickloServiceWorker() {
@@ -285,16 +488,33 @@ function bindEvents() {
     closeSheets();
   });
 
-  clearChatsBtn.addEventListener("click", () => {
-    if (!confirm("Delete every saved Picklo conversation from this browser?")) return;
-    state.chats = [];
-    state.activeChatId = null;
-    ensureActiveChat();
-    saveState();
-    renderAll();
+  clearChatsBtn.addEventListener("click", async () => {
+    if (!confirm("Delete every Picklo conversation saved to your account?")) return;
+    clearChatsBtn.disabled = true;
+    try {
+      const { error } = await supabase
+        .from("picklo_conversations")
+        .delete()
+        .eq("user_id", currentUser.id);
+      if (error) throw error;
+
+      cloudSyncPaused = true;
+      state.chats = [];
+      state.activeChatId = null;
+      ensureActiveChat();
+      lastCloudSnapshot = "";
+      cloudSyncPaused = false;
+      saveState();
+      renderAll();
+    } catch (error) {
+      setCloudSyncStatus(error?.message || "Could not clear conversations.", true);
+    } finally {
+      clearChatsBtn.disabled = false;
+    }
   });
 
   settingsBtn.addEventListener("click", () => openSheet(settingsSheet));
+  accountBtn.addEventListener("click", () => openSheet(settingsSheet));
   panelModelBtn.addEventListener("click", () => openSheet(settingsSheet));
   startButton.addEventListener("click", () => openSheet(settingsSheet));
 
@@ -518,6 +738,10 @@ function loadState() {
 }
 
 function normalizeState(parsed) {
+  const chats = Array.isArray(parsed?.chats)
+    ? parsed.chats.map(normalizeChat).filter(Boolean)
+    : [];
+
   return {
     ...defaultState(),
     ...parsed,
@@ -527,22 +751,223 @@ function normalizeState(parsed) {
     agentHistory: Array.isArray(parsed?.agentHistory) ? parsed.agentHistory.slice(0, 20) : [],
     notes: Array.isArray(parsed?.notes) ? parsed.notes : [],
     memories: Array.isArray(parsed?.memories) ? parsed.memories : [],
-    chats: Array.isArray(parsed?.chats) ? parsed.chats : []
+    chats
   };
+}
+
+function normalizeChat(chat) {
+  if (!chat || typeof chat !== "object") return null;
+  const createdAt = normalizeTimestamp(chat.createdAt);
+  return {
+    ...chat,
+    id: isUuid(chat.id) ? chat.id : createId(),
+    title: String(chat.title || "New chat").slice(0, 120),
+    mode: MODE_PROMPTS[chat.mode] ? chat.mode : "general",
+    createdAt,
+    updatedAt: normalizeTimestamp(chat.updatedAt || createdAt),
+    messages: Array.isArray(chat.messages)
+      ? chat.messages.map(normalizeMessage).filter(Boolean)
+      : []
+  };
+}
+
+function normalizeMessage(message) {
+  if (!message || !["user", "assistant"].includes(message.role)) return null;
+  return {
+    ...message,
+    id: isUuid(message.id) ? message.id : createId(),
+    role: message.role,
+    content: String(message.content || ""),
+    createdAt: normalizeTimestamp(message.createdAt)
+  };
+}
+
+function normalizeTimestamp(value) {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? parsed : Date.now();
+}
+
+function isUuid(value) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(value || ""));
+}
+
+function createId() {
+  if (crypto.randomUUID) return crypto.randomUUID();
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  bytes[6] = (bytes[6] & 0x0f) | 0x40;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const hex = [...bytes].map((value) => value.toString(16).padStart(2, "0")).join("");
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
+function loadStateForUser(userId) {
+  try {
+    const saved = localStorage.getItem(`${USER_STATE_PREFIX}:${userId}`);
+    if (saved) return normalizeState(JSON.parse(saved));
+  } catch (error) {
+    console.warn("Picklo user cache load failed:", error);
+  }
+
+  const previous = loadState();
+  return normalizeState({ ...previous, activeChatId: null, chats: [] });
 }
 
 function saveState() {
   try {
     state.version = APP_VERSION;
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    const key = currentUser ? `${USER_STATE_PREFIX}:${currentUser.id}` : STORAGE_KEY;
+    localStorage.setItem(key, JSON.stringify(state));
   } catch (error) {
     console.warn("Picklo state save failed:", error);
   }
+
+  scheduleCloudSync();
+}
+
+function createCloudSnapshot() {
+  for (const chat of state.chats) {
+    if (!isUuid(chat.id)) chat.id = createId();
+    chat.messages = (chat.messages || []).map(normalizeMessage).filter(Boolean);
+  }
+
+  return JSON.stringify(state.chats.map((chat) => ({
+    id: chat.id,
+    title: String(chat.title || "New chat").slice(0, 120),
+    mode: MODE_PROMPTS[chat.mode] ? chat.mode : "general",
+    createdAt: normalizeTimestamp(chat.createdAt),
+    updatedAt: normalizeTimestamp(chat.updatedAt),
+    messages: chat.messages.map((message) => ({
+      id: message.id,
+      role: message.role,
+      content: String(message.content || ""),
+      modelContent: message.modelContent ? String(message.modelContent) : null,
+      sources: Array.isArray(message.sources) ? message.sources : [],
+      tool: String(message.tool || ""),
+      attachments: Array.isArray(message.attachments) ? message.attachments : [],
+      artifact: message.artifact || null,
+      createdAt: normalizeTimestamp(message.createdAt)
+    }))
+  })));
+}
+
+function scheduleCloudSync() {
+  if (cloudSyncPaused || !currentUser) return;
+  const snapshot = createCloudSnapshot();
+  if (snapshot === lastCloudSnapshot) return;
+
+  if (cloudSyncTimer) clearTimeout(cloudSyncTimer);
+  setCloudSyncStatus("Saving conversations…");
+  const userId = currentUser.id;
+
+  cloudSyncTimer = setTimeout(() => {
+    cloudSyncTimer = null;
+    cloudSyncChain = cloudSyncChain
+      .catch(() => {})
+      .then(() => flushCloudSync(snapshot, userId))
+      .catch((error) => {
+        console.error("Picklo cloud sync failed:", error);
+        setCloudSyncStatus("Could not save — retrying", true);
+        if (currentUser?.id === userId) setTimeout(scheduleCloudSync, 5000);
+      });
+  }, CLOUD_SYNC_DELAY);
+}
+
+async function flushCloudSync(snapshot, userId) {
+  if (!currentUser || currentUser.id !== userId) return;
+  const chats = JSON.parse(snapshot);
+  if (!chats.length) return;
+
+  const conversationRows = chats.map((chat) => ({
+    id: chat.id,
+    user_id: userId,
+    title: chat.title,
+    mode: chat.mode,
+    created_at: new Date(chat.createdAt).toISOString(),
+    updated_at: new Date(chat.updatedAt).toISOString()
+  }));
+  const { error: conversationError } = await supabase
+    .from("picklo_conversations")
+    .upsert(conversationRows, { onConflict: "id" });
+  if (conversationError) throw conversationError;
+
+  const messageRows = chats.flatMap((chat) => chat.messages.map((message) => ({
+    id: message.id,
+    conversation_id: chat.id,
+    user_id: userId,
+    role: message.role,
+    content: message.content,
+    model_content: message.modelContent,
+    sources: message.sources,
+    tool: message.tool,
+    attachments: message.attachments,
+    artifact: message.artifact,
+    created_at: new Date(message.createdAt).toISOString()
+  })));
+
+  for (let index = 0; index < messageRows.length; index += 100) {
+    const { error: messageError } = await supabase
+      .from("picklo_messages")
+      .upsert(messageRows.slice(index, index + 100), { onConflict: "id" });
+    if (messageError) throw messageError;
+  }
+
+  lastCloudSnapshot = snapshot;
+  setCloudSyncStatus("Conversations saved to your account");
+}
+
+async function loadChatsFromCloud() {
+  if (!currentUser) return;
+  const [conversationResult, messageResult] = await Promise.all([
+    supabase
+      .from("picklo_conversations")
+      .select("id,title,mode,created_at,updated_at")
+      .order("updated_at", { ascending: false }),
+    supabase
+      .from("picklo_messages")
+      .select("id,conversation_id,role,content,model_content,sources,tool,attachments,artifact,created_at")
+      .order("created_at", { ascending: true })
+  ]);
+
+  if (conversationResult.error) throw conversationResult.error;
+  if (messageResult.error) throw messageResult.error;
+
+  const messagesByChat = new Map();
+  for (const row of messageResult.data || []) {
+    const list = messagesByChat.get(row.conversation_id) || [];
+    list.push(normalizeMessage({
+      id: row.id,
+      role: row.role,
+      content: row.content,
+      modelContent: row.model_content,
+      sources: Array.isArray(row.sources) ? row.sources : [],
+      tool: row.tool || "",
+      attachments: Array.isArray(row.attachments) ? row.attachments : [],
+      artifact: row.artifact || null,
+      createdAt: row.created_at
+    }));
+    messagesByChat.set(row.conversation_id, list);
+  }
+
+  state.chats = (conversationResult.data || []).map((row) => normalizeChat({
+    id: row.id,
+    title: row.title,
+    mode: row.mode,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    messages: messagesByChat.get(row.id) || []
+  }));
+  if (!state.chats.some((chat) => chat.id === state.activeChatId)) {
+    state.activeChatId = state.chats[0]?.id || null;
+  }
+  const active = state.chats.find((chat) => chat.id === state.activeChatId);
+  if (active) state.activeMode = active.mode || state.defaultMode || "general";
+  lastCloudSnapshot = createCloudSnapshot();
 }
 
 function makeChat() {
   return {
-    id: crypto.randomUUID ? crypto.randomUUID() : `chat-${Date.now()}-${Math.random()}`,
+    id: createId(),
     title: "New chat",
     mode: state.defaultMode || "general",
     createdAt: Date.now(),
@@ -597,11 +1022,24 @@ function switchChat(id) {
   closeSheets();
 }
 
-function deleteChat(id) {
+async function deleteChat(id) {
   if (isGenerating) return;
+  const { error } = await supabase
+    .from("picklo_conversations")
+    .delete()
+    .eq("id", id)
+    .eq("user_id", currentUser.id);
+  if (error) {
+    setCloudSyncStatus(error.message || "Could not delete the conversation.", true);
+    return;
+  }
+
+  cloudSyncPaused = true;
   state.chats = state.chats.filter((chat) => chat.id !== id);
   if (state.activeChatId === id) state.activeChatId = state.chats[0]?.id || null;
   ensureActiveChat();
+  lastCloudSnapshot = "";
+  cloudSyncPaused = false;
   saveState();
   renderAll();
 }
@@ -712,7 +1150,10 @@ function renderChatList(container, chats) {
     remove.title = "Delete chat";
     remove.addEventListener("click", (event) => {
       event.stopPropagation();
-      deleteChat(chat.id);
+      deleteChat(chat.id).catch((error) => {
+        console.error("Picklo conversation delete failed:", error);
+        setCloudSyncStatus("Could not delete the conversation.", true);
+      });
     });
 
     row.append(open, remove);
@@ -2085,7 +2526,7 @@ async function handleFiles(event) {
     ? `${uploaded.length} document${uploaded.length === 1 ? "" : "s"} uploaded and ready for your next question.`
     : "No readable documents were added.";
   setTimeout(() => {
-    composerNote.textContent = "Chats, memory and files stay in this browser.";
+    composerNote.textContent = "Chats sync to your account. Models and attached file text stay on this device.";
   }, 2500);
 }
 
@@ -2504,6 +2945,14 @@ function renderAgentHistory() {
 async function routeAgentTool(content) {
   const intent = classifyAgentIntent(content, { hasFiles: localFiles.length > 0 });
   if (!intent) return null;
+
+  if (intent.type === "picklo_identity" || intent.type === "km_digital_labs") {
+    return {
+      handled: true,
+      tool: "",
+      reply: KM_DIGITAL_LABS_REPLY
+    };
+  }
 
   if (intent.type === "memory_save") {
     setAgentActivity("Saving memory", "Memory");
