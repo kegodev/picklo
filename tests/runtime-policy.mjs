@@ -70,4 +70,4 @@ const creative = getAdaptiveSampling(
 );
 assert.deepEqual(creative, { temperature: 0.2, topP: 0.88 });
 
-console.log("Picklo V8.1 runtime policy checks passed.");
+console.log("Picklo V8.3 runtime policy checks passed.");
