@@ -1,4 +1,4 @@
-const BUILD_VERSION = "8.2.2-fix4";
+const BUILD_VERSION = "8.3.0-web";
 const CACHE = `picklo-shell-${BUILD_VERSION}`;
 const SHELL = [
   "./",

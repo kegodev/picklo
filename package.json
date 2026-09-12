@@ -1,0 +1,14 @@
+{
+  "name": "picklo",
+  "version": "8.3.0",
+  "private": true,
+  "type": "module",
+  "description": "Gemini-first personal AI web app with grounded web search by KM Digital Labs",
+  "scripts": {
+    "check": "node scripts/validate.mjs",
+    "test": "npm run check"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

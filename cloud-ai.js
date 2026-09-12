@@ -1,4 +1,4 @@
-import { supabase, SUPABASE_PUBLISHABLE_KEY, SUPABASE_URL } from "./supabase-client.js?v=8.2.2-fix4";
+import { supabase, SUPABASE_PUBLISHABLE_KEY, SUPABASE_URL } from "./supabase-client.js?v=8.3.0-web";
 
 export const CLOUD_FUNCTION_NAME = "picklo-gemini";
 const CLOUD_ENDPOINT = `${SUPABASE_URL}/functions/v1/${CLOUD_FUNCTION_NAME}`;
@@ -76,19 +76,47 @@ async function parseResponse(response) {
 
   const text = String(data?.text || "").trim();
   if (!text) throw new CloudAIError("Gemini returned an empty response. Please try again.", 502);
+  const sources = normalizeWebSources(data?.sources);
   return {
     text,
     model: String(data?.model || "Gemini"),
     usage: data?.usage && typeof data.usage === "object" ? data.usage : null,
-    guest: Boolean(data?.guest)
+    guest: Boolean(data?.guest),
+    searched: Boolean(data?.searched || sources.length),
+    searchUnavailable: Boolean(data?.searchUnavailable),
+    sources
   };
+}
+
+function normalizeWebSources(value) {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set();
+  const sources = [];
+
+  for (const item of value) {
+    try {
+      const parsed = new URL(String(item?.url || ""));
+      if (!['http:', 'https:'].includes(parsed.protocol) || seen.has(parsed.href)) continue;
+      seen.add(parsed.href);
+      sources.push({
+        kind: "web",
+        title: String(item?.title || parsed.hostname).replace(/\s+/g, " ").trim().slice(0, 100) || parsed.hostname,
+        url: parsed.href
+      });
+      if (sources.length >= 8) break;
+    } catch {
+      // Ignore malformed or unsafe citation URLs returned by an upstream model.
+    }
+  }
+
+  return sources;
 }
 
 async function performRequest(payload, token, signal) {
   const headers = {
     "apikey": SUPABASE_PUBLISHABLE_KEY,
     "Content-Type": "application/json",
-    "X-Client-Info": "picklo-web/8.2.2-fix4"
+    "X-Client-Info": "picklo-web/8.3.0-web"
   };
   // The Edge Function is public for ordinary text chat. Only attach a bearer
   // token when a real registered session exists; protected image analysis is
@@ -111,10 +139,11 @@ export async function requestCloudCompletion({
   maxTokens = 720,
   profile = "balanced",
   purpose = "answer",
+  webSearch = purpose === "answer",
   signal
 }) {
   const request = createRequestSignal(signal);
-  const payload = { messages, temperature, topP, maxTokens, profile, purpose };
+  const payload = { messages, temperature, topP, maxTokens, profile, purpose, webSearch: Boolean(webSearch) };
 
   try {
     const token = await getOptionalAccessToken();

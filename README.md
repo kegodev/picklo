@@ -1,331 +1,144 @@
-<div align="center">
+# Picklo
 
-<img src="assets/picklo-logo.svg" alt="Picklo" width="520">
+![Picklo interface](assets/picklo-v7-preview.png)
 
-# Picklo V8.1
+Picklo is a responsive personal AI web app by KM Digital Labs. Version 8.3 uses Gemini by default on every phone, tablet, and computer, and can ground answers in current public information with Google Search.
 
-<img src="https://img.shields.io/badge/Release-V8.1.0-5F56C9?style=for-the-badge" alt="V8.1">
-<img src="https://img.shields.io/badge/Agent-Private_Tools-2F8A5C?style=for-the-badge" alt="Private agent tools">
-<img src="https://img.shields.io/badge/Startup-Automatic-202020?style=for-the-badge" alt="Automatic startup">
-<img src="https://img.shields.io/badge/Inference-Web_Worker-5367E8?style=for-the-badge" alt="Web Worker">
+## What is included
 
-### [Open Picklo Live](https://pickloai.kmdigitallabs.co.za/)
+- Mobile-first chat interface and installable PWA.
+- Gemini cloud intelligence is the default on every device; no large local model downloads automatically.
+- Google Search grounding for current information, with safe clickable source links below the answer.
+- Gemini requests pass through a Supabase Edge Function; the Gemini key never reaches browser code.
+- Short live work notes such as “Thinking…”, “Searching the web…”, “Reading files…”, and “Preparing code…”. They disappear when the answer is ready and are not saved in chat history.
+- Clickable Markdown links and safe automatic link detection.
+- Fenced code blocks with language labels, copy controls, and syntax colours for tags, attributes, variables, keywords, strings, numbers, comments, selectors, and properties.
+- Photo messages displayed directly in chat, with Gemini vision analysis and browser OCR fallback.
+- Local document reading for PDF, Word, RTF, text, Markdown, CSV, JSON, HTML, CSS, JavaScript, TypeScript, Python, and other text/code formats.
+- Downloadable chat files including HTML, CSS, JavaScript, TypeScript, Python, PDF, DOC, DOCX, TXT, Markdown, JSON, CSV, XML, YAML, SVG, SQL, and many common source-code formats.
+- Supabase Auth and per-user text conversation sync.
+- Automatic cache-version checks so repeat visitors receive the latest release.
 
-<br>
+## Privacy model
 
-<img src="assets/picklo-v7-preview.png" alt="Picklo V7 interface" width="100%">
+| Data | Location | Cross-browser sync |
+| --- | --- | --- |
+| Text conversations | Browser and the signed-in user's Supabase rows | Yes |
+| Original photos and documents | Browser IndexedDB only | No |
+| Generated downloadable files | Browser storage only | No |
+| Public web citation links | Browser and the signed-in user's Supabase message row | Yes |
+| Gemini API key | Supabase Edge Function secret `PICKLO_API` | Never exposed |
 
-</div>
+When a signed-in user asks Picklo to inspect a photo, a resized copy is sent transiently to the Edge Function and Gemini for that response. Picklo does not write the photo to Supabase Database or Storage. Attachment fields, generated artifacts, local filenames, and local file-source labels are stripped from conversation sync requests. Only sanitized public `http`/`https` citation links may sync with the text conversation.
 
----
+## Inference policy
 
-## V8.1 answer consistency and mobile startup update
+| Device | Default AI runtime | Automatic large model download |
+| --- | --- | --- |
+| Phone or tablet | Gemini | No |
+| PC without WebGPU | Gemini | No |
+| Low-memory or low-core PC | Gemini | No |
+| Capable WebGPU desktop | Gemini | No |
 
-Picklo V8.1 adapts local inference to the device and turns explicit user constraints into a checked response contract.
+The WebLLM files remain in the repository for future/manual offline work, but V8.3 does not import or start them during normal use. This keeps the same lightweight startup on strong and weak devices.
 
-- **Required accounts:** users sign in or create an account with Supabase Auth before Picklo starts.
-- **Per-user cloud chats:** conversations and messages sync through dedicated Picklo tables in the existing 015 Closet Supabase project.
-- **Private row access:** row-level security limits every conversation and message to its authenticated owner.
-- **Store isolation:** Picklo uses separate tables and does not read or change 015 Closet products, orders, customers or inventory.
-- **Grounded product identity:** Picklo accurately identifies KM Digital Labs as its founder, designer, developer and owner, and can summarize the company's verified services when asked.
-- **Phone-adaptive models:** Balanced uses the capable 1B model on phones, while Quality uses 1.7B instead of forcing the 3B desktop default.
-- **Low-memory fallback:** when an automatically selected model cannot start, Picklo retries progressively lighter available models instead of leaving the chat unusable.
-- **Persistent manual override:** advanced users can still choose a model manually; the override remains until the Performance profile changes.
-- **Requirement checklist:** explicit instructions such as “must,” “only,” “include,” “avoid,” and bulleted constraints are carried into generation and final verification.
-- **Stable factual answers:** technical, analytical and constraint-heavy prompts use more deterministic sampling, while creative writing keeps its expressive settings.
-- **Targeted Balanced verification:** complex constrained, code, analytical and high-stakes answers receive a private correction pass without doubling every ordinary phone response.
+## Web intelligence
 
-## V8 contextual intelligence update
+Requests for current, changing, explicitly searched, or purchase-sensitive information enable Gemini's Google Search grounding tool. Gemini combines relevant public results with its model knowledge and returns grounding metadata. Picklo validates those URLs and renders them as source chips below the answer. Stable writing, coding, and general-knowledge requests use Gemini without an unnecessary search.
 
-Picklo V8 improves intelligence at the application layer while preserving private local inference.
+Review passes, artifact-repair passes, and image analysis do not enable web search, avoiding duplicate searches. Search-grounding usage can add Gemini API cost, so the Edge Function applies stricter per-minute limits to grounded requests. See Google's current [Google Search grounding documentation](https://ai.google.dev/gemini-api/docs/google-search) and pricing before production launch.
 
-- **Context-aware follow-ups:** a compact dialogue-state packet identifies recent goals and helps resolve references such as “it,” “that,” “continue,” and “same as before.”
-- **Natural language nuance:** the model is explicitly guided to interpret idioms, figurative language, understatement, frustration and likely sarcasm from context.
-- **Structured reasoning:** complex requests are internally represented as goals, facts, constraints, unknowns and required outputs before the final answer is checked.
-- **Stronger inference:** analytical questions must consider a plausible alternative explanation and keep conclusions proportional to the available evidence.
-- **Broader knowledge retrieval:** synonym-based query expansion finds relevant passages even when a book, article or expert source uses different terminology from the question.
-- **Balanced sources:** conflicting expert views are represented fairly, with supplied primary or authoritative material preferred over unsupported claims.
-- **Honest scope:** V8 does not claim that a browser app has retrained its foundation model; users broaden its working knowledge by adding local books, articles and documents.
+## Run locally
 
-## V7.4 intelligence, startup and PWA update
+This is a static ES-module app, so it must be served over HTTP rather than opened directly as a `file://` page.
 
-Picklo V7.4 strengthens the local assistant while keeping the app responsive on ordinary devices.
-
-- **Authenticated model warmup:** model hydration starts automatically after the signed-in session and private conversations are restored.
-- **Persistent model cache:** Picklo requests persistent browser storage and reuses WebLLM model files on later visits and home-screen launches.
-- **Stronger defaults:** Fast uses a capable 1B model, Balanced uses 1.7B, and Quality uses the strongest preferred 3B model.
-- **Quality verification:** complex answers in Quality mode receive a private second-pass review for missed requirements, contradictions, unsafe advice and incomplete code.
-- **Honest current information:** Picklo no longer invents live news, prices, citations, URLs or other changing facts it cannot verify.
-- **Better conversation context:** recent messages are selected using both message and character budgets, preserving useful continuity without uncontrolled prompt growth.
-- **Improved document retrieval:** local file passages are ranked with BM25-style term weighting, phrase bonuses, filename relevance and upload priority.
-- **Validated file generation:** invalid JSON, XML, SVG and unbalanced code artifacts can be repaired privately before the download card is returned.
-- **Real Word files:** Word requests now produce `.docx` Open XML documents instead of only Word-compatible HTML files.
-- **Home-screen identity:** Apple touch, 192px maskable and 512px maskable icons use the Picklo mascot when the PWA is installed.
-- **Calmer interface:** improved reading width, typography, focus states, reduced-motion support, mobile safe-area handling and a copyright notice confined to Settings.
-
-## V7.2 answer-quality and privacy update
-
-Picklo now performs calculations and safe code preparation privately, then shows the finished answer instead of exposing tool status, scratch work, or execution badges.
-
-- **More reliable answers:** lower sampling temperatures and stronger verification instructions reduce guessing.
-- **Exact arithmetic:** percentage questions, word operations, exponent syntax and ordinary expressions route through the deterministic local calculator.
-- **Private processing:** calculation, code and model activity stay hidden from the conversation.
-- **File-only visibility:** tool activity is shown only when Picklo actually returns a downloadable file.
-- **Cleaner code handling:** JavaScript can be prepared without automatically opening the sandbox.
-- **Visible uploads:** attached documents appear as file cards in chat and update to show when they were analyzed.
-- **Automatic document context:** newly uploaded PDF, Word, rich-text, text and code documents are included in the next response.
-- **Downloadable results:** Picklo can return HTML, CSS, JavaScript, TypeScript, Python, PDF, Word-compatible, Markdown, JSON, CSV, XML, YAML, SQL and many other code/text files.
-- **Refined dark mode:** a calm charcoal, soft-white and muted-grey palette replaces the previous robotic black-and-purple treatment.
-
-## V7.1 performance update
-
-Picklo now starts its local model immediately after the first painted frame, keeps repeat visits fast with a stale-while-revalidate app shell, uses leaner prompt budgets, and batches streamed text updates to reduce main-thread work.
-
-- **Faster startup:** no browser-idle delay before model loading.
-- **Faster repeat visits:** cached app files render immediately while updates refresh in the background.
-- **Smoother streaming:** the interface redraws at a controlled interval instead of once per token.
-- **Leaner inference:** Fast, Balanced and Quality modes send smaller histories and response budgets.
-
-## V7 is the agent foundation
-
-V6.1 made Picklo faster. V7 adds a controlled routing layer that decides when a safe built-in tool should handle part of a request.
-
-The default router is intentionally application-level. Small fast models do not need to produce tool-call JSON for basic tasks such as arithmetic, date/time, notes, memory, or local-file retrieval.
-
-```text
-User message
-    │
-    ▼
-Picklo Agent Router
-    │
-    ├── Calculator ───────────────► direct result
-    ├── Local date/time ──────────► direct result
-    ├── Notes ────────────────────► save/read locally
-    ├── Memory ───────────────────► save locally
-    ├── File search ──────────────► retrieve context
-    ├── Code request ─────────────► prepare sandbox
-    │
-    └── General request
-             │
-             ▼
-       Local language model
+```bash
+git clone https://github.com/kegodev/picklo.git
+cd picklo
+python -m http.server 8080
 ```
 
-## Automatic safe tools
+Open `http://localhost:8080`.
 
-With **Agent tools = On**, normal chat can now invoke supported local tools automatically.
+No frontend build step is required. An internet connection is required for Gemini, web search, authentication, and first-time loading of optional browser helpers.
 
-### Calculator
+## Supabase configuration
 
-```text
-sqrt(144) + 12 * 3
+The browser configuration is in [`supabase-client.js`](supabase-client.js). A Supabase URL and publishable/anon key are public client configuration; never place a service-role key or Gemini key there.
+
+The frontend expects Supabase Auth plus the existing `picklo_conversations` and `picklo_messages` tables with row-level security restricting rows to their owner. The app deliberately writes empty `attachments` and `artifact` values to cloud message rows.
+
+### Gemini secret and Edge Function
+
+1. Link the Supabase CLI to the intended project.
+2. Add the Gemini API key as an Edge Function secret:
+
+```bash
+supabase secrets set PICKLO_API=your_gemini_key
 ```
 
-Picklo routes the expression to its local calculator parser instead of asking the language model to guess the arithmetic.
+3. Deploy the included function:
 
-### Local date and time
-
-```text
-what time is it?
-what is today's date?
+```bash
+supabase functions deploy picklo-gemini --no-verify-jwt
 ```
 
-Picklo reads the browser device's local clock directly.
+The function uses custom authentication because guest text chat is supported. Image analysis still requires a real registered Supabase session. It validates request sizes, applies separate search rate limits, reads `PICKLO_API` only from `Deno.env`, extracts grounded citations, and does not persist request bodies.
 
-### Memory
+If you set the optional `PICKLO_GEMINI_MODEL` secret, choose a model that supports Google Search grounding. Otherwise, the function uses search-capable Gemini Flash aliases and 2.5 fallbacks.
 
-```text
-remember that I prefer concise answers
-```
+If ordinary Gemini chat works but grounded requests return HTTP `429`, check the Google AI project attached to `PICKLO_API` for Google Search grounding quota and billing. Picklo will try a safe non-search Gemini answer so chat remains available, and it will not claim that changing facts were verified live.
 
-V7 saves the detail to persistent Picklo memory immediately.
+## InfinityFree deployment
 
-### Quick notes
+Upload the public web files to `htdocs` with `index.html` directly inside `htdocs`:
 
-```text
-save a note: redesign the landing page tomorrow
-show my notes
-```
+- `index.html`
+- `app.js`, `enhancements.js`, `cloud-ai.js`, `agent-router.js`, `runtime-policy.js`, `supabase-client.js`, `webllm-worker.js`, and `sw.js`
+- `styles.css` and `enhancements.css`
+- `manifest.webmanifest` and `version.json`
+- the complete `assets/` folder
 
-Quick notes remain separate from AI memory.
+Repository-only paths such as `.github/`, `scripts/`, `supabase/`, and Markdown documentation do not need to be uploaded to InfinityFree.
 
-### Local file search
+Use HTTPS in production. WebGPU, service workers, secure authentication, clipboard access, and PWA installation depend on a secure context.
 
-```text
-search my files for nitrate results
-according to my PDF, what was the conclusion?
-```
-
-V7 invokes local document retrieval first and then gives the relevant passages to the language model.
-
-### JavaScript preparation
+## Repository structure
 
 ```text
-run javascript: console.log("hello")
-```
-
-The router loads explicit JavaScript into the existing local sandbox but does **not** execute it automatically. The user still presses **Run**.
-
-## Private agent activity
-
-Picklo keeps calculation, code and model activity behind the finished answer. It does not display states such as:
-
-```text
-Agent ready
-Using Calculator
-Searching local files
-Waiting for local model
-Thinking
-Answering
-```
-
-Tool badges and recent activity are reserved for files that Picklo returns to the user.
-
-## Tools can work before the model is ready
-
-The composer is available immediately.
-
-Calculator, date/time, notes and memory can respond even while the local language model is still loading.
-
-For ordinary AI requests, Picklo waits for the automatically starting model and then continues the pending request.
-
-## Agent controls
-
-Open **Settings → Agent tools**.
-
-```text
-On  — safe local tools can route automatically
-Off — chat only
-```
-
-The choice is stored locally.
-
-## Performance retained
-
-V7.4 keeps and strengthens the V6.1 performance architecture:
-
-- model warmup at the earliest safe startup point;
-- persistent browser caching for downloaded model files;
-- Fast / Balanced / Quality modes with larger quality budgets;
-- Web Worker inference;
-- batched streaming UI updates;
-- BM25-style document retrieval;
-- network-first navigation with cached offline fallback;
-- browser model caching;
-- tokens-per-second display when available.
-
-## Visual system retained
-
-### Light
-
-```text
-Background   #FFFFFF
-Text         #1F1F1F
-```
-
-### Dark
-
-```text
-Background   #141714
-Surface      #20241F
-Text         #F6F6F2
-```
-
-V7 keeps the flat, high-contrast V6 styling without neon effects.
-
-## V6.1 → V7 migration
-
-When V7 has no existing local state, it checks for V6.1 data and imports supported values:
-
-- conversations;
-- memories;
-- notes;
-- theme;
-- model selection;
-- performance profile;
-- response mode.
-
-## Project structure
-
-```text
-picklo-v7.4/
+picklo/
 ├── .github/
-│   └── workflows/
-│       └── deploy-pages.yml
+│   ├── PULL_REQUEST_TEMPLATE.md
+│   └── workflows/validate.yml
 ├── assets/
-│   ├── picklo-logo.svg
-│   ├── picklo-mark.svg
-│   ├── apple-touch-icon.png
-│   ├── favicon-32.png
-│   ├── picklo-192.png
-│   ├── picklo-512.png
-│   └── picklo-v7-preview.png
+├── CHANGELOG.md
+├── scripts/validate.mjs
+├── supabase/functions/picklo-gemini/index.ts
 ├── agent-router.js
 ├── app.js
+├── cloud-ai.js
+├── enhancements.css
+├── enhancements.js
 ├── index.html
 ├── manifest.webmanifest
 ├── runtime-policy.js
-├── supabase-client.js
 ├── styles.css
+├── supabase-client.js
 ├── sw.js
-├── webllm-worker.js
-└── README.md
+├── version.json
+└── webllm-worker.js
 ```
 
-## Evolution
+## Validate a change
 
-```text
-V1  Browser AI
- ↓
-V2  Memory + saved chats
- ↓
-V3  Local document retrieval
- ↓
-V4  Real chat interface
- ↓
-V5  Built-in tools
- ↓
-V6  Readability
- ↓
-V6.1 Automatic fast startup
- ↓
-V7  Automatic safe tool routing
- ↓
-V7.1 Faster startup, caching and streaming
- ↓
-V7.2 More accurate answers and private processing
- ↓
-V7.4 Stronger reasoning, verified files and installable app icons
- ↓
-V8 Contextual intelligence
- ↓
-V8.1 Account sync, consistent answers and phone-adaptive startup
+```bash
+npm test
 ```
 
-## Boundaries
+The validation checks JavaScript syntax, release-version consistency, Gemini-default routing, search grounding and citations, transient activity notes, required hosting files, browser-only attachment protections, and accidental secret exposure. The same checks run automatically on every pull request.
 
-V7.4 does not silently give the AI unrestricted control of the browser or device.
+See [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request. Security issues should follow [SECURITY.md](SECURITY.md).
 
-It does not automatically:
+## Ownership
 
-- browse arbitrary websites;
-- access the operating-system filesystem;
-- execute shell commands;
-- execute JavaScript without explicit user confirmation;
-- send prompts or attached file contents to a remote AI model.
-
-Conversation titles and messages are intentionally synced to Supabase for the signed-in user. Model inference, uploaded file text, memories, notes and downloaded model files remain on the device.
-
-The agent layer is intentionally constrained.
-
----
-
-<div align="center">
-
-<img src="assets/picklo-mark.svg" alt="Picklo" width="76">
-
-### Picklo V7.4
-
-**Chat normally. Picklo checks privately and returns the finished answer.**
-
-</div>
+Picklo is designed and maintained by [KM Digital Labs](https://kmdigitallabs.co.za).

@@ -217,6 +217,86 @@
   }
 }
 
+/* V8.3 — Gemini web intelligence, citations, and transient work notes */
+.agent-activity {
+  min-height: 30px !important;
+  margin-top: 5px !important;
+  border: 0 !important;
+  background: transparent !important;
+  color: var(--muted) !important;
+  padding: 5px 10px !important;
+  font-size: 12px !important;
+}
+
+.agent-activity-dot {
+  width: 7px !important;
+  height: 7px !important;
+}
+
+.source-line {
+  align-items: center;
+  gap: 6px !important;
+  margin-top: 12px !important;
+  padding-top: 9px;
+  border-top: 1px solid rgba(105, 92, 190, .16);
+}
+
+.source-label {
+  flex: 0 0 100%;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.source-chip {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  color: #6255b5 !important;
+  font-size: 11px !important;
+  font-weight: 650;
+  line-height: 1.25;
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+
+.source-chip.web-source::after {
+  content: "↗";
+  margin-left: 4px;
+  font-size: .9em;
+}
+
+.source-chip.web-source:hover,
+.source-chip.web-source:focus-visible {
+  border-color: #9f93df;
+  background: #eeeaff;
+  outline: none;
+}
+
+:root[data-theme="dark"] .source-line {
+  border-top-color: rgba(208, 218, 202, .15);
+}
+
+:root[data-theme="dark"] .source-label {
+  color: #9ca397;
+}
+
+:root[data-theme="dark"] .source-chip {
+  color: #dce4d8 !important;
+}
+
+@media (max-width: 820px) {
+  .agent-activity {
+    width: calc(100% - 24px) !important;
+    margin-top: 3px !important;
+    font-size: 11px !important;
+  }
+
+  .source-chip {
+    font-size: 10px !important;
+  }
+}
+
 
 /* 8.2.2-fix4 — foreground account screen and guest account affordance */
 .auth-gate {
