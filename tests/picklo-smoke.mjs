@@ -11,8 +11,8 @@ const serviceWorker = read("sw.js");
 const runtimePolicy = read("runtime-policy.js");
 const supabaseClient = read("supabase-client.js");
 
-assert.match(app, /APP_VERSION = "8\.1\.0"/);
-assert.match(html, /Picklo V8\.1/);
+assert.match(app, /APP_VERSION = "8\.3\.0"/);
+assert.match(html, /Picklo V8\.3/);
 assert.match(html, /class="copyright-card"/);
 assert.equal((html.match(/KM Digital Labs/g) || []).length, 1, "Visible ownership should stay in the Settings copyright card");
 assert.match(html, /Picklo was founded, designed and is owned by KM Digital Labs/);
@@ -43,7 +43,7 @@ assert.match(app, /extractExplicitRequirements/);
 assert.match(app, /getAdaptiveSampling/);
 assert.match(app, /getModelLoadCandidates/);
 assert.match(runtimePolicy, /recommendModelForDevice/);
-assert.match(serviceWorker, /picklo-v8\.1-shell-v3/);
+assert.match(serviceWorker, /picklo-v8\.3-shell-v3/);
 assert.match(serviceWorker, /runtime-policy\.js/);
 assert.match(serviceWorker, /supabase-client\.js/);
 assert.match(app, /signInWithPassword/);
@@ -56,4 +56,4 @@ assert.match(supabaseClient, /sb_publishable_/);
 assert.doesNotMatch(supabaseClient, /service_role|sb_secret_/);
 assert.match(styles, /Final V7\.4 cascade safeguards/);
 
-console.log("Picklo V8.1 smoke checks passed.");
+console.log("Picklo V8.3 smoke checks passed.");
