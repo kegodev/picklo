@@ -9,7 +9,7 @@
 <img src="https://img.shields.io/badge/Startup-Automatic-202020?style=for-the-badge" alt="Automatic startup">
 <img src="https://img.shields.io/badge/Inference-Web_Worker-5367E8?style=for-the-badge" alt="Web Worker">
 
-### [Open Picklo Live](https://kegodev.github.io/picklo/)
+### [Open Picklo Live](https://pickloai.kmdigitallabs.co.za/)
 
 <br>
 

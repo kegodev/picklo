@@ -497,6 +497,83 @@ html[data-theme="dark"] .composer-box {
   }
 }
 
+/* =========================================================
+   Picklo V8.2.2 — compact chat and iOS keyboard viewport
+   ========================================================= */
+
+:root {
+  --picklo-viewport-height: 100dvh;
+  --picklo-viewport-top: 0px;
+}
+
+.chat-heading {
+  flex: 1 1 auto;
+}
+
+.chat-title-line h1 {
+  max-width: none;
+}
+
+.messages.has-chat {
+  display: flex;
+  flex-direction: column;
+  padding-bottom: 6px;
+}
+
+.messages.has-chat::before {
+  content: "";
+  flex: 1 1 0;
+  min-height: 0;
+}
+
+.messages.has-chat > * {
+  flex: 0 0 auto;
+}
+
+.messages.has-chat > .message-row:last-child {
+  margin-bottom: 0;
+}
+
+.composer {
+  padding-top: 0;
+}
+
+@media (max-width: 820px) {
+  .app {
+    position: fixed;
+    top: var(--picklo-viewport-top);
+    right: 0;
+    bottom: auto;
+    left: 0;
+    height: var(--picklo-viewport-height) !important;
+    max-height: var(--picklo-viewport-height) !important;
+  }
+
+  .chat-shell {
+    height: 100% !important;
+    max-height: 100% !important;
+  }
+
+  .chat-header {
+    position: relative !important;
+    top: auto !important;
+    flex: 0 0 auto;
+    z-index: 50;
+  }
+
+  .messages {
+    padding-bottom: 6px !important;
+  }
+
+  .composer {
+    padding: 0 10px max(8px, env(safe-area-inset-bottom, 0px));
+  }
+
+  html[data-keyboard="open"] .composer {
+    padding-bottom: 6px;
+  }
+}
+
 /* Picklo account access and encrypted cloud conversation sync */
 .app[hidden],
 .auth-gate[hidden] {
@@ -2291,3 +2368,8 @@ html[data-theme="dark"] .copyright-card p {
     transition-duration: .01ms !important;
   }
 }
+
+
+/* V8.2.2 guest account gate */
+.auth-guest{width:100%;min-height:42px;margin-top:10px;border:1px solid var(--border-strong);border-radius:12px;background:transparent;color:var(--text);font-weight:700}
+.auth-guest:hover{background:var(--surface-2)}

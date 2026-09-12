@@ -1,15 +1,16 @@
-import * as webllm from "https://esm.run/@mlc-ai/web-llm";
-import { classifyAgentIntent } from "./agent-router.js";
-import { supabase } from "./supabase-client.js";
+import { classifyAgentIntent } from "./agent-router.js?v=8.2.2-fix4";
+import { isAbortError, requestCloudCompletion } from "./cloud-ai.js?v=8.2.2-fix4";
+import { supabase } from "./supabase-client.js?v=8.2.2-fix4";
 import {
   detectRuntimeCapabilities,
   extractExplicitRequirements,
   getAdaptiveSampling,
   getModelLoadCandidates,
-  recommendModelForDevice
-} from "./runtime-policy.js";
+  recommendModelForDevice,
+  selectInferenceMode
+} from "./runtime-policy.js?v=8.2.2-fix4";
 
-const APP_VERSION = "8.1.0";
+const APP_VERSION = "8.2.2";
 const STORAGE_KEY = "picklo-v7-state";
 const V61_STORAGE_KEY = "picklo-v6.1-state";
 const FILE_DB = "picklo-v3-files";
@@ -76,7 +77,7 @@ Support: [help@kmdigitallabs.co.za](mailto:help@kmdigitallabs.co.za)
 `.trim();
 
 const BASE_SYSTEM_PROMPT = `
-You are Picklo V8.1, a capable general-purpose personal AI assistant that runs locally in the user's browser.
+You are Picklo V8.2.2, a capable general-purpose personal AI assistant. Picklo uses private local inference on capable desktop computers and secure cloud inference on mobile, tablet and unsupported devices.
 You are useful for questions, writing, coding, planning, brainstorming, explanations, decision support and document analysis.
 Do not claim to be ChatGPT, OpenAI, or another product. Identify yourself simply as Picklo when relevant.
 
@@ -105,6 +106,8 @@ GENERAL RULES:
 15. Interpret language in context. Resolve pronouns and follow-up references from the conversation before answering. Recognize common idioms, understatement, figurative language and likely sarcasm; when ambiguity would materially change the answer, ask one concise clarifying question instead of guessing.
 16. For complex requests, silently form a short problem representation: the goal, supplied facts, constraints, unknowns and required output. Test the answer against those items before returning it.
 17. When sources or expert views disagree, represent the meaningful disagreement fairly. Prefer supplied primary or authoritative material and distinguish source evidence from inference.
+18. When returning code in chat, always use a fenced Markdown code block with the correct language label so Picklo can render syntax colours correctly.
+19. When you mention a website or email address, use normal Markdown link syntax so it is clickable.
 `.trim();
 
 const defaultState = () => ({
@@ -124,9 +127,15 @@ const defaultState = () => ({
 });
 
 let state = loadState();
+let webllm = null;
+let webllmModulePromise = null;
 let engine = null;
 let modelWorker = null;
 let loadedModelId = null;
+let activeInferenceMode = "cloud";
+let inferenceReason = "initializing";
+let runtimeCapabilities = null;
+let cloudAbortController = null;
 let isGenerating = false;
 let generationWasStopped = false;
 let localFiles = [];
@@ -137,11 +146,16 @@ let currentUser = null;
 let loadedUserId = null;
 let sessionLoadPromise = null;
 let authMode = "sign-in";
+let authReason = "";
+let pendingProtectedAction = null;
+let pendingGuestChat = null;
 let appEventsBound = false;
 let cloudSyncPaused = true;
 let cloudSyncTimer = null;
 let cloudSyncChain = Promise.resolve();
 let lastCloudSnapshot = "";
+let largestVisualViewportHeight = 0;
+let previousVisualViewportHeight = 0;
 
 const $ = (id) => document.getElementById(id);
 
@@ -160,7 +174,9 @@ const accountInitial = $("accountInitial");
 const settingsAccountInitial = $("settingsAccountInitial");
 const accountEmail = $("accountEmail");
 const cloudSyncStatus = $("cloudSyncStatus");
+const accountSummary = $("accountSummary");
 const signOutBtn = $("signOutBtn");
+const authGuestBtn = $("authGuestBtn");
 
 const newChatBtn = $("newChatBtn");
 const mobileNewChatBtn = $("mobileNewChatBtn");
@@ -172,15 +188,13 @@ const chatForm = $("chatForm");
 const messageInput = $("messageInput");
 const sendBtn = $("sendBtn");
 const stopBtn = $("stopBtn");
-const quickActions = $("quickActions");
 const fileInput = $("fileInput");
+const attachButton = $("attachButton");
 const fileCount = $("fileCount");
 const panelFileCount = $("panelFileCount");
 const panelMemoryCount = $("panelMemoryCount");
 const memoryCount = $("memoryCount");
 const panelModelName = $("panelModelName");
-const activeModeLabel = $("activeModeLabel");
-const modeButton = $("modeButton");
 
 const settingsBtn = $("settingsBtn");
 const filesBtn = $("filesBtn");
@@ -236,6 +250,9 @@ const themeToggleBtn = $("themeToggleBtn");
 const themeSelect = $("themeSelect");
 const performanceSelect = $("performanceSelect");
 const performanceStatus = $("performanceStatus");
+const performanceHelp = $("performanceHelp");
+const modelSettingGroup = $("modelSettingGroup");
+const modelHelpText = $("modelHelpText");
 const autoToolsSelect = $("autoToolsSelect");
 const agentStatus = $("agentStatus");
 const agentActivityBar = $("agentActivityBar");
@@ -245,7 +262,6 @@ const agentToolCount = $("agentToolCount");
 const agentHistoryList = $("agentHistoryList");
 
 const toolsBtn = $("toolsBtn");
-const composerToolsBtn = $("composerToolsBtn");
 const toolsSheet = $("toolsSheet");
 const calculatorInput = $("calculatorInput");
 const calculatorRunBtn = $("calculatorRunBtn");
@@ -264,12 +280,20 @@ boot();
 
 async function boot() {
   applyTheme(state.theme || "light", false);
+  bindVisualViewport();
   bindAuthEvents();
   registerPickloServiceWorker();
 
   const { data, error } = await supabase.auth.getSession();
   if (error) setAuthMessage(error.message);
-  await handleAuthSession(data?.session || null);
+  let initialSession = data?.session || null;
+  if (initialSession?.user && !initialSession.user.is_anonymous) {
+    const expiresAtMs = Number(initialSession.expires_at || 0) * 1000;
+    if (expiresAtMs && expiresAtMs <= Date.now() + 30000) {
+      initialSession = await getValidRegisteredSession();
+    }
+  }
+  await handleAuthSession(initialSession);
 
   supabase.auth.onAuthStateChange((_event, session) => {
     setTimeout(() => {
@@ -281,10 +305,62 @@ async function boot() {
   });
 }
 
+function bindVisualViewport() {
+  const viewport = window.visualViewport;
+
+  const update = () => {
+    const height = Math.max(1, Math.round(viewport?.height || window.innerHeight));
+    const top = Math.max(0, Math.round(viewport?.offsetTop || 0));
+    const inputFocused = document.activeElement === messageInput;
+
+    if (!inputFocused) largestVisualViewportHeight = Math.max(largestVisualViewportHeight, height);
+    if (!largestVisualViewportHeight) largestVisualViewportHeight = height;
+
+    document.documentElement.style.setProperty("--picklo-viewport-height", `${height}px`);
+    document.documentElement.style.setProperty("--picklo-viewport-top", `${top}px`);
+    document.documentElement.dataset.keyboard = inputFocused && largestVisualViewportHeight - height > 100
+      ? "open"
+      : "closed";
+
+    if (inputFocused && Math.abs(previousVisualViewportHeight - height) > 24) {
+      requestAnimationFrame(() => {
+        scrollToBottom(false);
+        // iOS Safari can keep the layout viewport tall while shrinking only visualViewport.
+        // Keeping the app fixed to visualViewport plus resetting page scroll keeps the composer above the keyboard.
+        if (window.scrollY !== 0) window.scrollTo(0, 0);
+      });
+    }
+    previousVisualViewportHeight = height;
+  };
+
+  update();
+  window.addEventListener("resize", update, { passive: true });
+  window.addEventListener("orientationchange", () => {
+    largestVisualViewportHeight = 0;
+    setTimeout(update, 80);
+  }, { passive: true });
+  viewport?.addEventListener("resize", update, { passive: true });
+  viewport?.addEventListener("scroll", update, { passive: true });
+  messageInput.addEventListener("focus", () => {
+    update();
+    setTimeout(update, 80);
+    setTimeout(update, 280);
+  });
+  messageInput.addEventListener("blur", () => setTimeout(update, 80));
+}
+
 function bindAuthEvents() {
   authSignInTab.addEventListener("click", () => setAuthMode("sign-in"));
   authSignUpTab.addEventListener("click", () => setAuthMode("sign-up"));
   authForm.addEventListener("submit", handleAuthSubmit);
+  authGuestBtn?.addEventListener("click", () => {
+    authReason = "";
+    pendingProtectedAction = null;
+    pendingGuestChat = null;
+    setAuthGateOpen(false);
+    // On mobile, do not immediately reopen the keyboard after dismissing login.
+    if (window.matchMedia?.("(pointer: fine)")?.matches) messageInput?.focus();
+  });
   signOutBtn.addEventListener("click", async () => {
     signOutBtn.disabled = true;
     try {
@@ -305,7 +381,9 @@ function setAuthMode(mode) {
   authSignUpTab.classList.toggle("active", signingUp);
   authSignInTab.setAttribute("aria-selected", String(!signingUp));
   authSignUpTab.setAttribute("aria-selected", String(signingUp));
-  authTitle.textContent = signingUp ? "Create your Picklo account" : "Sign in to use Picklo";
+  authTitle.textContent = signingUp
+    ? "Create your Picklo account"
+    : (authReason || "Sign in to Picklo");
   authSubmitBtn.textContent = signingUp ? "Create account" : "Sign in";
   authPassword.autocomplete = signingUp ? "new-password" : "current-password";
   setAuthMessage("");
@@ -321,6 +399,10 @@ async function handleAuthSubmit(event) {
   setAuthMessage("");
 
   try {
+    if (currentUser?.is_anonymous) {
+      await supabase.auth.signOut();
+      currentUser = null;
+    }
     if (authMode === "sign-up") {
       const { data, error } = await supabase.auth.signUp({
         email,
@@ -357,47 +439,191 @@ function setAuthMessage(message, success = false) {
   authMessage.classList.toggle("success", Boolean(success));
 }
 
+function isRegisteredUser() {
+  return Boolean(currentUser && !currentUser.is_anonymous && currentUser.email);
+}
+
+function isGuestUser() {
+  return !isRegisteredUser();
+}
+
+function setAuthGateOpen(open, { loading = false } = {}) {
+  const shouldOpen = Boolean(open);
+  authGate.hidden = !shouldOpen;
+  authGate.classList.toggle("session-loading", shouldOpen && loading);
+  document.documentElement.dataset.auth = shouldOpen ? "open" : "closed";
+
+  if (shouldOpen) {
+    messageInput?.blur();
+    closeSheets();
+    appRoot?.setAttribute("inert", "");
+    appRoot?.setAttribute("aria-hidden", "true");
+  } else {
+    appRoot?.removeAttribute("inert");
+    appRoot?.removeAttribute("aria-hidden");
+  }
+}
+
+function showAuthGate(reason = "Sign in to continue") {
+  authReason = reason;
+  setAuthMode("sign-in");
+  authGuestBtn?.classList.remove("hidden");
+  setAuthMessage("");
+  setAuthGateOpen(true);
+
+  // Do not force the iPhone keyboard open when the account screen appears.
+  const desktopPointer = window.matchMedia?.("(pointer: fine)")?.matches && window.innerWidth > 760;
+  if (desktopPointer) setTimeout(() => authEmail?.focus(), 60);
+}
+
+function requireRegisteredAccount(action, payload = null) {
+  if (isRegisteredUser()) return true;
+  pendingProtectedAction = { action, payload };
+  if (isGuestUser()) pendingGuestChat = cloneActiveGuestChat();
+  const reason = action === "upload"
+    ? "Sign in to attach photos or documents"
+    : action === "download"
+      ? "Sign in to download this file"
+      : "Sign in to continue";
+  showAuthGate(reason);
+  return false;
+}
+
+async function getValidRegisteredSession() {
+  try {
+    let { data, error } = await supabase.auth.getSession();
+    if (error) return null;
+    let session = data?.session || null;
+    const validUser = () => Boolean(session?.access_token && session?.user && !session.user.is_anonymous && session.user.email);
+    if (!validUser()) return null;
+
+    const expiresAtMs = Number(session.expires_at || 0) * 1000;
+    if (expiresAtMs && expiresAtMs <= Date.now() + 30000) {
+      const refreshed = await supabase.auth.refreshSession();
+      if (refreshed.error) return null;
+      session = refreshed.data?.session || null;
+    }
+    return validUser() ? session : null;
+  } catch {
+    return null;
+  }
+}
+
+async function ensureRegisteredAccount(action, payload = null) {
+  const session = await getValidRegisteredSession();
+  if (session) {
+    currentUser = session.user;
+    if (!loadedUserId) loadedUserId = session.user.id;
+    return true;
+  }
+  pendingProtectedAction = { action, payload };
+  if (isGuestUser()) pendingGuestChat = cloneActiveGuestChat();
+  const reason = action === "upload"
+    ? "Sign in to attach photos or documents"
+    : action === "download"
+      ? "Sign in to download this file"
+      : "Sign in to continue";
+  showAuthGate(reason);
+  return false;
+}
+
+function cloneActiveGuestChat() {
+  try {
+    const chat = getActiveChat();
+    return JSON.parse(JSON.stringify(chat));
+  } catch {
+    return null;
+  }
+}
+
+async function mergePendingGuestChatIntoAccount() {
+  const guestChat = pendingGuestChat;
+  if (!guestChat?.id) return;
+  pendingGuestChat = null;
+
+  const normalized = normalizeChat(guestChat);
+  if (!normalized) return;
+  const existingIndex = state.chats.findIndex((chat) => chat.id === normalized.id);
+  if (existingIndex >= 0) state.chats[existingIndex] = normalized;
+  else state.chats.unshift(normalized);
+  state.activeChatId = normalized.id;
+  state.activeMode = normalized.mode || state.defaultMode || "general";
+
+  // Transfer generated-file payloads into this account's device-only asset store.
+  for (const message of normalized.messages || []) {
+    if (message.artifact || message.attachments?.length) await putLocalMessageAsset(message);
+  }
+}
+
+async function resumePendingProtectedAction() {
+  if (!isRegisteredUser() || !pendingProtectedAction) return;
+  const pending = pendingProtectedAction;
+  pendingProtectedAction = null;
+  authReason = "";
+
+  // iOS blocks file pickers/downloads that are launched long after the original
+  // user gesture. Resume with a clear instruction instead of a fragile auto-click.
+  if (pending.action === "upload") {
+    composerNote.textContent = "Signed in. Tap the paperclip again to add your photo or document.";
+    setTimeout(() => { composerNote.textContent = getDefaultComposerNote(); }, 3500);
+  } else if (pending.action === "download") {
+    composerNote.textContent = "Signed in. Tap Download again to save the file.";
+    setTimeout(() => { composerNote.textContent = getDefaultComposerNote(); }, 3500);
+  }
+}
+
 async function handleAuthSession(session) {
   const user = session?.user || null;
-  if (!user) {
-    currentUser = null;
+
+  if (!user || user.is_anonymous) {
+    const leavingRegisteredScope = Boolean(loadedUserId);
+    currentUser = user;
     loadedUserId = null;
     cloudSyncPaused = true;
     if (cloudSyncTimer) clearTimeout(cloudSyncTimer);
     cloudSyncTimer = null;
     lastCloudSnapshot = "";
-    state = normalizeState({ ...state, activeChatId: null, chats: [] });
-    if (appEventsBound) closeSheets();
-    appRoot.hidden = true;
-    authGate.hidden = false;
-    setAuthMode("sign-in");
-    authEmail.focus();
+
+    // On sign-out/session loss, always leave the previous account state behind.
+    // Otherwise a registered user's chats could remain visible and then be saved
+    // into the guest localStorage scope.
+    if (leavingRegisteredScope || !appEventsBound || appRoot.hidden) {
+      await startGuestApp();
+    } else {
+      renderAccount();
+      setAuthGateOpen(false);
+    }
     return;
   }
 
   if (loadedUserId === user.id && !appRoot.hidden) {
     currentUser = user;
     renderAccount();
+    setAuthGateOpen(false);
+    await resumePendingProtectedAction();
     return;
   }
   if (loadedUserId === user.id && sessionLoadPromise) return sessionLoadPromise;
 
   currentUser = user;
   loadedUserId = user.id;
-  authGate.hidden = false;
   appRoot.hidden = true;
+  authReason = "";
+  setAuthMode("sign-in");
+  authTitle.textContent = "Opening Picklo…";
   setAuthMessage("Loading your conversations…", true);
+  setAuthGateOpen(true, { loading: true });
   sessionLoadPromise = startAuthenticatedApp(user).finally(() => {
     sessionLoadPromise = null;
   });
   return sessionLoadPromise;
 }
 
-async function startAuthenticatedApp(user) {
+async function startGuestApp() {
   cloudSyncPaused = true;
-  state = loadStateForUser(user.id);
+  state = loadState();
   applyTheme(state.theme || "light", false);
-  populateModels();
+  await configureInferenceRuntime();
   applyPerformanceProfile(state.performanceProfile || "balanced", false, false);
 
   if (!appEventsBound) {
@@ -405,17 +631,8 @@ async function startAuthenticatedApp(user) {
     appEventsBound = true;
   }
 
-  localFiles = await listLocalFiles();
-  let cloudLoaded = false;
-  try {
-    await loadChatsFromCloud();
-    cloudLoaded = true;
-    setCloudSyncStatus("Conversations saved to your account");
-  } catch (error) {
-    console.error("Picklo conversation load failed:", error);
-    setCloudSyncStatus("Cloud sync unavailable — changes will retry", true);
-  }
-
+  // Attachments are account-gated and never exposed from another signed-in user's local file store.
+  localFiles = [];
   ensureActiveChat();
   defaultModeSelect.value = state.defaultMode || "general";
   themeSelect.value = state.theme || "light";
@@ -431,23 +648,99 @@ async function startAuthenticatedApp(user) {
   setMode(state.activeMode || state.defaultMode || "general", false);
   renderAll();
   appRoot.hidden = false;
-  authGate.hidden = true;
+  setAuthGateOpen(false);
   setAuthMessage("");
+  saveState();
+
+  if (activeInferenceMode === "local") {
+    preserveLocalModelCache();
+    autoStartModel().catch((error) => console.warn("Guest model warmup failed:", error));
+  } else {
+    setCloudRuntimeReady();
+  }
+}
+
+async function startAuthenticatedApp(user) {
+  cloudSyncPaused = true;
+  state = loadStateForUser(user.id);
+  applyTheme(state.theme || "light", false);
+  await configureInferenceRuntime();
+  applyPerformanceProfile(state.performanceProfile || "balanced", false, false);
+
+  if (!appEventsBound) {
+    bindEvents();
+    appEventsBound = true;
+  }
+
+  localFiles = await listLocalFiles();
+  let cloudLoaded = false;
+  try {
+    await loadChatsFromCloud();
+    await rehydrateLocalMessageAssets();
+    cloudLoaded = true;
+    setCloudSyncStatus("Conversations saved to your account");
+  } catch (error) {
+    console.error("Picklo conversation load failed:", error);
+    setCloudSyncStatus("Cloud sync unavailable — changes will retry", true);
+  }
+
+  await mergePendingGuestChatIntoAccount();
+  ensureActiveChat();
+  defaultModeSelect.value = state.defaultMode || "general";
+  themeSelect.value = state.theme || "light";
+  performanceSelect.value = state.performanceProfile || "balanced";
+  autoToolsSelect.value = state.autoTools === false ? "off" : "on";
+  renderAgentHistory();
+  renderAccount();
+
+  messageInput.disabled = false;
+  sendBtn.disabled = false;
+  messageInput.placeholder = "Message Picklo…";
+
+  setMode(state.activeMode || state.defaultMode || "general", false);
+  renderAll();
+  appRoot.hidden = false;
+  setAuthGateOpen(false);
+  setAuthMessage("");
+  authReason = "";
 
   cloudSyncPaused = false;
   if (!cloudLoaded) lastCloudSnapshot = "";
   saveState();
 
-  preserveLocalModelCache();
-  autoStartModel().catch((error) => console.warn("Authenticated model warmup failed:", error));
+  if (activeInferenceMode === "local") {
+    preserveLocalModelCache();
+    autoStartModel().catch((error) => console.warn("Authenticated model warmup failed:", error));
+  } else {
+    setCloudRuntimeReady();
+  }
+  await resumePendingProtectedAction();
 }
 
 function renderAccount() {
-  const email = currentUser?.email || "Signed-in user";
-  const initial = email.trim().charAt(0).toUpperCase() || "U";
+  const registered = isRegisteredUser();
+  document.documentElement.dataset.account = registered ? "registered" : "guest";
+  const email = registered ? currentUser.email : "Guest mode";
+  const initial = registered ? (email.trim().charAt(0).toUpperCase() || "U") : "G";
   accountEmail.textContent = email;
   accountInitial.textContent = initial;
   settingsAccountInitial.textContent = initial;
+  signOutBtn.hidden = !registered;
+  accountSummary?.classList.toggle("guest-account-link", !registered);
+  if (accountSummary) {
+    if (!registered) {
+      accountSummary.setAttribute("role", "button");
+      accountSummary.setAttribute("tabindex", "0");
+      accountSummary.setAttribute("aria-label", "Sign in or create a Picklo account");
+      accountSummary.title = "Sign in or create account";
+    } else {
+      accountSummary.removeAttribute("role");
+      accountSummary.removeAttribute("tabindex");
+      accountSummary.removeAttribute("aria-label");
+      accountSummary.removeAttribute("title");
+    }
+  }
+  if (!registered) setCloudSyncStatus("Guest mode — chats stay in this browser");
 }
 
 function setCloudSyncStatus(message, isError = false) {
@@ -465,8 +758,13 @@ function registerPickloServiceWorker() {
     location.reload();
   });
 
-  navigator.serviceWorker.register("./sw.js").then((registration) => {
-    registration.update().catch(() => {});
+  navigator.serviceWorker.register("./sw.js?v=8.2.2-fix4", { updateViaCache: "none" }).then((registration) => {
+    const check = () => registration.update().catch(() => {});
+    check();
+    window.addEventListener("pageshow", check);
+    window.addEventListener("focus", check);
+    document.addEventListener("visibilitychange", () => { if (!document.hidden) check(); });
+    setInterval(check, 60000);
   }).catch(() => {});
 }
 
@@ -479,6 +777,14 @@ async function preserveLocalModelCache() {
 }
 
 function bindEvents() {
+  window.addEventListener("picklo:account-required", (event) => {
+    requireRegisteredAccount(event.detail?.action || "upload", event.detail?.payload || null);
+  });
+  window.addEventListener("picklo:local-files-mutated", async () => {
+    localFiles = await listLocalFiles();
+    renderFiles();
+    renderStats();
+  });
   newChatBtn.addEventListener("click", createNewChat);
   headerNewChatBtn.addEventListener("click", createNewChat);
   chatSearchInput.addEventListener("input", renderChats);
@@ -489,18 +795,25 @@ function bindEvents() {
   });
 
   clearChatsBtn.addEventListener("click", async () => {
-    if (!confirm("Delete every Picklo conversation saved to your account?")) return;
+    if (!confirm(isRegisteredUser() ? "Delete every Picklo conversation saved to your account?" : "Delete every guest conversation stored in this browser?")) return;
     clearChatsBtn.disabled = true;
     try {
-      const { error } = await supabase
-        .from("picklo_conversations")
-        .delete()
-        .eq("user_id", currentUser.id);
-      if (error) throw error;
+      if (isRegisteredUser()) {
+        const { error } = await supabase
+          .from("picklo_conversations")
+          .delete()
+          .eq("user_id", currentUser.id);
+        if (error) throw error;
+      }
 
+      const removedChats = [...state.chats];
       cloudSyncPaused = true;
       state.chats = [];
       state.activeChatId = null;
+      await deleteLocalMessageAssetsForChats(removedChats);
+      window.dispatchEvent(new CustomEvent("picklo:local-chats-deleted", {
+        detail: { chatIds: removedChats.map((chat) => chat.id).filter(Boolean) }
+      }));
       ensureActiveChat();
       lastCloudSnapshot = "";
       cloudSyncPaused = false;
@@ -514,12 +827,25 @@ function bindEvents() {
   });
 
   settingsBtn.addEventListener("click", () => openSheet(settingsSheet));
-  accountBtn.addEventListener("click", () => openSheet(settingsSheet));
+  accountBtn.addEventListener("click", () => {
+    if (isRegisteredUser()) openSheet(settingsSheet);
+    else showAuthGate("Sign in to your Picklo account");
+  });
+  accountSummary?.addEventListener("click", () => {
+    if (isRegisteredUser()) return;
+    closeSheets();
+    showAuthGate("Sign in to your Picklo account");
+  });
+  accountSummary?.addEventListener("keydown", (event) => {
+    if (isRegisteredUser() || !["Enter", " "].includes(event.key)) return;
+    event.preventDefault();
+    closeSheets();
+    showAuthGate("Sign in to your Picklo account");
+  });
   panelModelBtn.addEventListener("click", () => openSheet(settingsSheet));
   startButton.addEventListener("click", () => openSheet(settingsSheet));
 
   toolsBtn.addEventListener("click", () => { renderNotes(); renderAgentHistory(); openSheet(toolsSheet); });
-  composerToolsBtn.addEventListener("click", () => { renderNotes(); renderAgentHistory(); openSheet(toolsSheet); });
   document.querySelectorAll("[data-tool-tab]").forEach((button) => button.addEventListener("click", () => switchToolTab(button.dataset.toolTab)));
   calculatorRunBtn.addEventListener("click", runCalculator);
   calculatorInput.addEventListener("keydown", (event) => { if (event.key === "Enter") runCalculator(); });
@@ -541,7 +867,6 @@ function bindEvents() {
   });
 
   mobileMenuBtn.addEventListener("click", () => openSheet(conversationsSheet));
-  modeButton.addEventListener("click", () => openSheet(modeSheet));
 
   document.querySelectorAll("[data-close-sheet]").forEach((button) => {
     button.addEventListener("click", closeSheets);
@@ -605,7 +930,8 @@ function bindEvents() {
   performanceSelect.addEventListener("change", async () => {
     state.modelPreference = "auto";
     applyPerformanceProfile(performanceSelect.value, true, true);
-    await loadSelectedModel({ automatic: true });
+    if (activeInferenceMode === "local") await loadSelectedModel({ automatic: true });
+    else setCloudRuntimeReady();
   });
 
   loadModelBtn.addEventListener("click", () => loadSelectedModel({ automatic: false }));
@@ -623,23 +949,11 @@ function bindEvents() {
     }
   });
 
-  quickActions.addEventListener("click", (event) => {
-    const button = event.target.closest("[data-followup]");
-    if (!button || !engine || isGenerating) return;
-    messageInput.value = button.dataset.followup || "";
-    autoResize();
-    messageInput.focus();
-  });
-
   stopBtn.addEventListener("click", stopGeneration);
 
   messages.addEventListener("click", (event) => {
     const prompt = event.target.closest("[data-prompt]");
     if (prompt) {
-      if (!engine) {
-        openSheet(settingsSheet);
-        return;
-      }
       const mode = prompt.dataset.mode;
       if (mode) setMode(mode);
       messageInput.value = prompt.dataset.prompt || "";
@@ -659,7 +973,30 @@ function bindEvents() {
     }
   });
 
-  fileInput.addEventListener("change", handleFiles);
+  attachButton?.addEventListener("click", (event) => {
+    event.preventDefault();
+    // Keep fileInput.click() inside the original tap gesture so iOS Safari opens
+    // the picker reliably. The change handler validates session freshness again.
+    if (!requireRegisteredAccount("upload")) return;
+    fileInput?.click();
+  });
+
+  document.querySelectorAll('label[for="fileInput"]').forEach((label) => {
+    label.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      if (!requireRegisteredAccount("upload")) return;
+      fileInput?.click();
+    }, true);
+  });
+
+  fileInput.addEventListener("change", async (event) => {
+    if (!(await ensureRegisteredAccount("upload"))) {
+      event.target.value = "";
+      return;
+    }
+    await handleFiles(event);
+  });
   clearContextBtn.addEventListener("click", () => {
     activeFileSources = [];
     renderContext();
@@ -816,7 +1153,7 @@ function loadStateForUser(userId) {
 function saveState() {
   try {
     state.version = APP_VERSION;
-    const key = currentUser ? `${USER_STATE_PREFIX}:${currentUser.id}` : STORAGE_KEY;
+    const key = isRegisteredUser() ? `${USER_STATE_PREFIX}:${currentUser.id}` : STORAGE_KEY;
     localStorage.setItem(key, JSON.stringify(state));
   } catch (error) {
     console.warn("Picklo state save failed:", error);
@@ -837,22 +1174,26 @@ function createCloudSnapshot() {
     mode: MODE_PROMPTS[chat.mode] ? chat.mode : "general",
     createdAt: normalizeTimestamp(chat.createdAt),
     updatedAt: normalizeTimestamp(chat.updatedAt),
-    messages: chat.messages.map((message) => ({
-      id: message.id,
-      role: message.role,
-      content: String(message.content || ""),
-      modelContent: message.modelContent ? String(message.modelContent) : null,
-      sources: Array.isArray(message.sources) ? message.sources : [],
-      tool: String(message.tool || ""),
-      attachments: Array.isArray(message.attachments) ? message.attachments : [],
-      artifact: message.artifact || null,
-      createdAt: normalizeTimestamp(message.createdAt)
-    }))
+    messages: chat.messages
+      .filter((message) => String(message.content || "").trim() || (!message.attachments?.length && !message.artifact))
+      .map((message) => ({
+        id: message.id,
+        role: message.role,
+        content: String(message.content || ""),
+        // A generated file's full source lives only in the local artifact record.
+        modelContent: message.artifact ? null : (message.modelContent ? String(message.modelContent) : null),
+        // Local filenames/source chips are device-only metadata.
+        sources: [],
+        tool: message.artifact || message.attachments?.length ? "" : String(message.tool || ""),
+        attachments: [],
+        artifact: null,
+        createdAt: normalizeTimestamp(message.createdAt)
+      }))
   })));
 }
 
 function scheduleCloudSync() {
-  if (cloudSyncPaused || !currentUser) return;
+  if (cloudSyncPaused || !isRegisteredUser()) return;
   const snapshot = createCloudSnapshot();
   if (snapshot === lastCloudSnapshot) return;
 
@@ -874,7 +1215,7 @@ function scheduleCloudSync() {
 }
 
 async function flushCloudSync(snapshot, userId) {
-  if (!currentUser || currentUser.id !== userId) return;
+  if (!isRegisteredUser() || currentUser.id !== userId) return;
   const chats = JSON.parse(snapshot);
   if (!chats.length) return;
 
@@ -917,7 +1258,7 @@ async function flushCloudSync(snapshot, userId) {
 }
 
 async function loadChatsFromCloud() {
-  if (!currentUser) return;
+  if (!isRegisteredUser()) return;
   const [conversationResult, messageResult] = await Promise.all([
     supabase
       .from("picklo_conversations")
@@ -942,8 +1283,8 @@ async function loadChatsFromCloud() {
       modelContent: row.model_content,
       sources: Array.isArray(row.sources) ? row.sources : [],
       tool: row.tool || "",
-      attachments: Array.isArray(row.attachments) ? row.attachments : [],
-      artifact: row.artifact || null,
+      attachments: [],
+      artifact: null,
       createdAt: row.created_at
     }));
     messagesByChat.set(row.conversation_id, list);
@@ -963,6 +1304,89 @@ async function loadChatsFromCloud() {
   const active = state.chats.find((chat) => chat.id === state.activeChatId);
   if (active) state.activeMode = active.mode || state.defaultMode || "general";
   lastCloudSnapshot = createCloudSnapshot();
+}
+
+const MESSAGE_ASSET_DB = "picklo-local-message-assets-v1";
+const MESSAGE_ASSET_STORE = "assets";
+
+function openMessageAssetDB() {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(MESSAGE_ASSET_DB, 1);
+    request.onupgradeneeded = () => {
+      const db = request.result;
+      if (!db.objectStoreNames.contains(MESSAGE_ASSET_STORE)) {
+        db.createObjectStore(MESSAGE_ASSET_STORE, { keyPath: "messageId" });
+      }
+    };
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+async function putLocalMessageAsset(message) {
+  if (!message?.id || (!message.artifact && !message.attachments?.length)) return;
+  try {
+    const db = await openMessageAssetDB();
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction(MESSAGE_ASSET_STORE, "readwrite");
+      tx.objectStore(MESSAGE_ASSET_STORE).put({
+        messageId: message.id,
+        ownerId: isRegisteredUser() ? currentUser.id : "guest",
+        attachments: Array.isArray(message.attachments) ? message.attachments : [],
+        artifact: message.artifact || null,
+        createdAt: Date.now()
+      });
+      tx.oncomplete = resolve;
+      tx.onerror = () => reject(tx.error);
+    });
+  } catch (error) {
+    console.warn("Could not persist local message asset:", error);
+  }
+}
+
+async function rehydrateLocalMessageAssets() {
+  try {
+    const db = await openMessageAssetDB();
+    const rows = await new Promise((resolve, reject) => {
+      const tx = db.transaction(MESSAGE_ASSET_STORE, "readonly");
+      const req = tx.objectStore(MESSAGE_ASSET_STORE).getAll();
+      req.onsuccess = () => resolve(req.result || []);
+      req.onerror = () => reject(req.error);
+    });
+    const ownerId = isRegisteredUser() ? currentUser.id : "guest";
+    const byId = new Map(rows.filter((row) => row?.ownerId === ownerId).map((row) => [row.messageId, row]));
+    for (const chat of state.chats) {
+      for (const message of chat.messages || []) {
+        const local = byId.get(message.id);
+        if (!local) continue;
+        if (local.attachments?.length) message.attachments = local.attachments;
+        if (local.artifact) message.artifact = local.artifact;
+      }
+    }
+  } catch (error) {
+    console.warn("Could not restore local message assets:", error);
+  }
+}
+
+async function deleteLocalMessageAssetsForChat(chat) {
+  const ids = new Set((chat?.messages || []).map((message) => message?.id).filter(Boolean));
+  if (!ids.size) return;
+  try {
+    const db = await openMessageAssetDB();
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction(MESSAGE_ASSET_STORE, "readwrite");
+      const store = tx.objectStore(MESSAGE_ASSET_STORE);
+      ids.forEach((id) => store.delete(id));
+      tx.oncomplete = resolve;
+      tx.onerror = () => reject(tx.error);
+    });
+  } catch (error) {
+    console.warn("Could not remove local message assets for deleted chat:", error);
+  }
+}
+
+async function deleteLocalMessageAssetsForChats(chats) {
+  for (const chat of chats || []) await deleteLocalMessageAssetsForChat(chat);
 }
 
 function makeChat() {
@@ -1006,7 +1430,7 @@ function createNewChat() {
   autoResize();
   setMode(state.activeMode, false);
   renderAll();
-  if (engine) messageInput.focus();
+  messageInput.focus();
 }
 
 function switchChat(id) {
@@ -1024,22 +1448,27 @@ function switchChat(id) {
 
 async function deleteChat(id) {
   if (isGenerating) return;
-  const { error } = await supabase
-    .from("picklo_conversations")
-    .delete()
-    .eq("id", id)
-    .eq("user_id", currentUser.id);
-  if (error) {
-    setCloudSyncStatus(error.message || "Could not delete the conversation.", true);
-    return;
+  if (isRegisteredUser()) {
+    const { error } = await supabase
+      .from("picklo_conversations")
+      .delete()
+      .eq("id", id)
+      .eq("user_id", currentUser.id);
+    if (error) {
+      setCloudSyncStatus(error.message || "Could not delete the conversation.", true);
+      return;
+    }
   }
 
+  const removedChat = state.chats.find((chat) => chat.id === id) || null;
   cloudSyncPaused = true;
+  if (removedChat) await deleteLocalMessageAssetsForChat(removedChat);
+  window.dispatchEvent(new CustomEvent("picklo:local-chats-deleted", { detail: { chatIds: [id] } }));
   state.chats = state.chats.filter((chat) => chat.id !== id);
   if (state.activeChatId === id) state.activeChatId = state.chats[0]?.id || null;
   ensureActiveChat();
   lastCloudSnapshot = "";
-  cloudSyncPaused = false;
+  cloudSyncPaused = !isRegisteredUser();
   saveState();
   renderAll();
 }
@@ -1055,10 +1484,8 @@ function setMode(mode, persist = true) {
     button.classList.toggle("active", button.dataset.mode === mode);
   });
 
-  const label = mode.charAt(0).toUpperCase() + mode.slice(1);
-  activeModeLabel.textContent = label;
   assistantSubtitle.textContent = {
-    general: "Local, private and ready",
+    general: activeInferenceMode === "cloud" ? "Cloud AI for this device" : "Local, private and ready",
     write: "Writing and refinement",
     code: "Software reasoning",
     analyze: "Document analysis"
@@ -1077,8 +1504,7 @@ function renderAll() {
 }
 
 function renderHeader() {
-  const chat = getActiveChat();
-  headerChatTitle.textContent = chat.title || "New chat";
+  headerChatTitle.textContent = "Picklo";
 }
 
 function renderChats() {
@@ -1179,6 +1605,7 @@ function formatConversationTime(value) {
 function renderMessages() {
   const chat = getActiveChat();
   messages.innerHTML = "";
+  messages.classList.toggle("has-chat", Boolean(chat.messages.length));
 
   if (!chat.messages.length) {
     messages.innerHTML = `
@@ -1186,25 +1613,6 @@ function renderMessages() {
         <img class="welcome-mark" src="assets/picklo-mark.svg" alt="" />
         <h2>How can I help?</h2>
         <p>Talk to Picklo naturally. Ask a question, work through an idea, write something, code, or attach a file.</p>
-
-        <div class="starter-grid">
-          <button data-mode="general" data-prompt="Help me think through something. Ask only the questions you genuinely need." type="button">
-            <span class="starter-icon ask-icon">A</span>
-            <span class="starter-copy"><strong>Think with me</strong><span>Questions, ideas and decisions</span></span>
-          </button>
-          <button data-mode="write" data-prompt="Help me write something. Focus on the audience, purpose and strongest structure." type="button">
-            <span class="starter-icon write-icon">W</span>
-            <span class="starter-copy"><strong>Write something</strong><span>Draft, rewrite and improve</span></span>
-          </button>
-          <button data-mode="code" data-prompt="Help me build or debug some code. Prioritize a working solution and explain the important choices." type="button">
-            <span class="starter-icon code-icon">C</span>
-            <span class="starter-copy"><strong>Code together</strong><span>Build, debug and explain</span></span>
-          </button>
-          <button data-mode="analyze" data-prompt="I want to analyze a document or problem carefully. Help me separate evidence, assumptions and conclusions." type="button">
-            <span class="starter-icon analyze-icon">F</span>
-            <span class="starter-copy"><strong>Analyze something</strong><span>Files, evidence and reasoning</span></span>
-          </button>
-        </div>
       </div>`;
     return;
   }
@@ -1366,6 +1774,7 @@ function renderArtifactCard(container, artifact) {
   download.className = "artifact-download";
   download.textContent = "Download";
   download.addEventListener("click", async () => {
+    if (!requireRegisteredAccount("download", artifact)) return;
     download.disabled = true;
     download.textContent = "Preparing…";
     try {
@@ -1642,10 +2051,95 @@ function getRuntimeCapabilities() {
     deviceMemory: navigator.deviceMemory,
     hardwareConcurrency: navigator.hardwareConcurrency,
     userAgent: navigator.userAgent,
+    platform: navigator.platform,
     viewportWidth: window.innerWidth,
     maxTouchPoints: navigator.maxTouchPoints,
-    coarsePointer: window.matchMedia?.("(pointer: coarse)")?.matches || false
+    coarsePointer: window.matchMedia?.("(pointer: coarse)")?.matches || false,
+    hasWebGPU: "gpu" in navigator
   });
+}
+
+async function ensureWebLLMModule() {
+  if (webllm) return webllm;
+  if (!webllmModulePromise) {
+    webllmModulePromise = import("https://esm.run/@mlc-ai/web-llm")
+      .then((module) => {
+        webllm = module;
+        return module;
+      })
+      .catch((error) => {
+        webllmModulePromise = null;
+        throw error;
+      });
+  }
+  return webllmModulePromise;
+}
+
+async function configureInferenceRuntime() {
+  runtimeCapabilities = getRuntimeCapabilities();
+  const decision = selectInferenceMode(runtimeCapabilities);
+  activeInferenceMode = decision.mode;
+  inferenceReason = decision.reason;
+
+  if (activeInferenceMode === "local") {
+    try {
+      await ensureWebLLMModule();
+      populateModels();
+      modelSettingGroup.hidden = false;
+      modelSelect.disabled = false;
+      loadModelBtn.disabled = false;
+      performanceHelp.textContent = "Capable desktop computers use a private local model. Picklo falls back to Gemini automatically if local AI cannot start.";
+      modelHelpText.textContent = "Advanced local override. Changing the model manually can use more memory and make responses slower.";
+      return;
+    } catch (error) {
+      console.warn("The local AI module could not load; using cloud fallback:", error);
+      activeInferenceMode = "cloud";
+      inferenceReason = "module-unavailable";
+    }
+  }
+
+  configureCloudControls();
+}
+
+function configureCloudControls() {
+  modelSettingGroup.hidden = true;
+  modelSelect.disabled = true;
+  loadModelBtn.disabled = true;
+  performanceHelp.textContent = "Picklo uses Gemini on this device, so no large AI model is downloaded. Performance changes response length and depth.";
+  composerNote.textContent = getDefaultComposerNote();
+}
+
+function switchToCloudRuntime(reason = "local-fallback") {
+  activeInferenceMode = "cloud";
+  inferenceReason = reason;
+  runtimeCapabilities = getRuntimeCapabilities();
+  configureCloudControls();
+  setCloudRuntimeReady();
+}
+
+function setCloudRuntimeReady() {
+  const detail = {
+    phone: "Gemini • no phone model download",
+    tablet: "Gemini • no tablet model download",
+    "webgpu-unavailable": "Gemini • WebGPU not required",
+    "limited-hardware": "Gemini • optimized for this computer",
+    "module-unavailable": "Gemini • local module fallback",
+    "local-fallback": "Gemini • local model fallback"
+  }[inferenceReason] || "Gemini • cloud AI";
+  setRuntime("Picklo is ready", detail, "ready");
+  performanceStatus.textContent = `${getPerformanceProfile().label} • cloud`;
+  composerNote.textContent = getDefaultComposerNote();
+}
+
+function getDefaultComposerNote() {
+  if (!isRegisteredUser()) {
+    return activeInferenceMode === "cloud"
+      ? "Guest chat stays in this browser. Sign in only to attach photos/documents or download files."
+      : "Guest chat stays in this browser. Sign in only to attach photos/documents or download files.";
+  }
+  return activeInferenceMode === "cloud"
+    ? "Chats sync to your account. Files and photos stay only in this browser; Gemini processes them transiently when needed."
+    : "Chats sync to your account. The AI model, files and photos stay on this device.";
 }
 
 function applyPerformanceProfile(profileName, persist = true, updateModel = true) {
@@ -1653,14 +2147,12 @@ function applyPerformanceProfile(profileName, persist = true, updateModel = true
   const profile = PERFORMANCE_PROFILES[normalized];
 
   state.performanceProfile = normalized;
-  const capabilities = getRuntimeCapabilities();
-  performanceStatus.textContent = capabilities.isPhone
-    ? `${profile.label} • phone optimized`
-    : profile.label;
+  const capabilities = runtimeCapabilities || getRuntimeCapabilities();
+  performanceStatus.textContent = activeInferenceMode === "cloud" ? `${profile.label} • cloud` : profile.label;
 
   if (performanceSelect) performanceSelect.value = normalized;
 
-  if (updateModel) {
+  if (updateModel && activeInferenceMode === "local") {
     const recommended = recommendModelForDevice(normalized, getAvailableModelIds(), capabilities);
     if (recommended) {
       state.selectedModel = recommended;
@@ -1672,12 +2164,16 @@ function applyPerformanceProfile(profileName, persist = true, updateModel = true
 }
 
 async function autoStartModel() {
+  if (activeInferenceMode === "cloud") {
+    setCloudRuntimeReady();
+    return null;
+  }
   if (engine) return engine;
   if (modelLoadPromise) return modelLoadPromise;
 
   if (!("gpu" in navigator)) {
-    setRuntime("WebGPU unavailable", "Use a WebGPU-capable browser", "error");
-    return;
+    switchToCloudRuntime("webgpu-unavailable");
+    return null;
   }
 
   if (state.modelPreference !== "manual") {
@@ -1755,6 +2251,10 @@ async function resetModelRuntime() {
 
 async function loadSelectedModel(options = {}) {
   const { automatic = false } = options;
+  if (activeInferenceMode === "cloud") {
+    setCloudRuntimeReady();
+    return null;
+  }
   const selected = modelSelect.value || state.selectedModel;
 
   if (!selected || isGenerating) return;
@@ -1762,12 +2262,9 @@ async function loadSelectedModel(options = {}) {
   if (modelLoadPromise) return modelLoadPromise;
 
   if (!("gpu" in navigator)) {
-    setRuntime("WebGPU unavailable", "Use a WebGPU-capable browser", "error");
-    if (!automatic) {
-      closeSheets();
-      addError("WebGPU is unavailable in this browser. Picklo V8.1 needs a WebGPU-capable browser for local inference.");
-    }
-    return;
+    switchToCloudRuntime("webgpu-unavailable");
+    if (!automatic) closeSheets();
+    return null;
   }
 
   const profile = getPerformanceProfile();
@@ -1879,13 +2376,11 @@ async function loadSelectedModel(options = {}) {
         }
       }
 
-      setRuntime("Picklo could not start", "This device may not have enough WebGPU memory", "error");
-      loadModelBtn.textContent = "Try again";
-      messageInput.placeholder = "Picklo could not start";
-
-      if (!automatic) {
-        addError(`The selected model could not start. ${lastError?.message || String(lastError)}`);
-      }
+      console.warn("All local model candidates failed; switching to Gemini:", lastError);
+      switchToCloudRuntime("local-fallback");
+      loadModelBtn.textContent = "Cloud AI active";
+      messageInput.placeholder = "Message Picklo…";
+      if (!automatic) closeSheets();
       return null;
     } finally {
       loadModelBtn.disabled = false;
@@ -1913,8 +2408,10 @@ function setRuntime(title, detail, stateName = "idle") {
   }
 
   if (stateName === "ready") {
-    const modelName = friendlyModelName(loadedModelId || state.selectedModel);
-    modelStatus.textContent = `${modelName} • Local`;
+    const modelName = activeInferenceMode === "cloud"
+      ? "Gemini Cloud"
+      : friendlyModelName(loadedModelId || state.selectedModel);
+    modelStatus.textContent = activeInferenceMode === "cloud" ? "Gemini • Cloud" : `${modelName} • Local`;
     panelModelName.textContent = modelName;
     sidebarModelText.textContent = modelName;
     startButton.title = "Picklo settings";
@@ -1926,6 +2423,93 @@ function setRuntime(title, detail, stateName = "idle") {
     startButton.title = stateName === "loading" ? "Picklo is starting" : "Picklo settings";
     startButton.classList.remove("ready");
   }
+}
+
+async function generatePrimaryCompletion(messagesForModel, sampling, profile, activityLabel) {
+  if (activeInferenceMode === "cloud") {
+    const controller = new AbortController();
+    cloudAbortController = controller;
+    try {
+      const result = await requestCloudCompletion({
+        messages: messagesForModel,
+        temperature: sampling.temperature,
+        topP: sampling.topP,
+        maxTokens: profile.maxTokens,
+        profile: state.performanceProfile,
+        purpose: "answer",
+        signal: controller.signal
+      });
+      setAgentActivity("Preparing the answer", activityLabel);
+      return {
+        text: result.text,
+        completionTokens: Number(result.usage?.candidatesTokenCount || result.usage?.totalOutputTokens || 0)
+      };
+    } catch (error) {
+      if (!isRegisteredUser() && Number(error?.status || 0) === 401) {
+        throw new Error("Guest cloud chat is temporarily unavailable. Please try again in a moment.");
+      }
+      throw error;
+    } finally {
+      if (cloudAbortController === controller) cloudAbortController = null;
+    }
+  }
+
+  if (!engine) throw new Error("The local AI model is not ready.");
+  const stream = await engine.chat.completions.create({
+    messages: messagesForModel,
+    temperature: sampling.temperature,
+    top_p: sampling.topP,
+    max_tokens: profile.maxTokens,
+    stream: true,
+    stream_options: { include_usage: true }
+  });
+
+  let text = "";
+  let completionTokens = 0;
+  let receivedFirstToken = false;
+  for await (const chunk of stream) {
+    const delta = chunk.choices?.[0]?.delta?.content || "";
+    if (chunk.usage?.completion_tokens) completionTokens = chunk.usage.completion_tokens;
+    if (!delta) continue;
+    if (!receivedFirstToken) {
+      receivedFirstToken = true;
+      setAgentActivity("Preparing the answer", activityLabel);
+    }
+    text += delta;
+  }
+  return { text, completionTokens };
+}
+
+async function generateOneShotCompletion(messagesForModel, options = {}) {
+  const { temperature = 0.1, topP = 0.8, maxTokens = 800, purpose = "review" } = options;
+  if (activeInferenceMode === "cloud") {
+    const controller = new AbortController();
+    cloudAbortController = controller;
+    try {
+      const result = await requestCloudCompletion({
+        messages: messagesForModel,
+        temperature,
+        topP,
+        maxTokens,
+        profile: state.performanceProfile,
+        purpose,
+        signal: controller.signal
+      });
+      return result.text;
+    } finally {
+      if (cloudAbortController === controller) cloudAbortController = null;
+    }
+  }
+
+  if (!engine) throw new Error("The local AI model is not ready.");
+  const result = await engine.chat.completions.create({
+    messages: messagesForModel,
+    temperature,
+    top_p: topP,
+    max_tokens: maxTokens,
+    stream: false
+  });
+  return String(result?.choices?.[0]?.message?.content || "");
 }
 
 async function sendMessage() {
@@ -1995,7 +2579,7 @@ async function sendMessage() {
     activeFileSources = sourceNames;
     renderContext();
 
-    if (!engine) {
+    if (activeInferenceMode === "local" && !engine) {
       setAgentActivity("Waiting for the local model to finish starting", "Model");
       try {
         await autoStartModel();
@@ -2004,24 +2588,11 @@ async function sendMessage() {
       }
     }
 
-    if (!engine) {
-      chat.messages.push({
-        role: "assistant",
-        content: "I could not start the local language model on this device. My built-in local tools still work, but normal AI replies need a WebGPU-compatible model to finish loading.",
-        createdAt: Date.now(),
-        tool: "Runtime"
-      });
-      chat.updatedAt = Date.now();
-      saveState();
-      renderMessages();
-      renderChats();
-      setAgentIdleSoon();
-      return;
-    }
+    if (activeInferenceMode === "local" && !engine) switchToCloudRuntime("local-fallback");
 
     setAgentActivity(
       route?.toolName ? `Using ${route.toolName} and answering` : "Thinking",
-      route?.toolName || "Model"
+      route?.toolName || (activeInferenceMode === "cloud" ? "Cloud AI" : "Model")
     );
 
     const assistantBubble = appendMessageToDOM("assistant", "", {
@@ -2032,38 +2603,17 @@ async function sendMessage() {
     assistantBubble.textContent = "";
 
     let fullReply = "";
-    let completionTokens = 0;
     const generationStartedAt = performance.now();
     const profile = getPerformanceProfile();
     const sampling = getAdaptiveSampling(content, profile, state.activeMode);
-
-    const stream = await engine.chat.completions.create({
-      messages: buildModelMessages(chat, retrieved, route?.toolContext || "", requestedArtifact),
-      temperature: sampling.temperature,
-      top_p: sampling.topP,
-      max_tokens: profile.maxTokens,
-      stream: true,
-      stream_options: { include_usage: true }
-    });
-
-    let receivedFirstToken = false;
-
-    for await (const chunk of stream) {
-      const delta = chunk.choices?.[0]?.delta?.content || "";
-
-      if (chunk.usage?.completion_tokens) {
-        completionTokens = chunk.usage.completion_tokens;
-      }
-
-      if (!delta) continue;
-
-      if (!receivedFirstToken) {
-        receivedFirstToken = true;
-        setAgentActivity("Preparing the answer", route?.toolName || "Model");
-      }
-
-      fullReply += delta;
-    }
+    const completion = await generatePrimaryCompletion(
+      buildModelMessages(chat, retrieved, route?.toolContext || "", requestedArtifact),
+      sampling,
+      profile,
+      route?.toolName || (activeInferenceMode === "cloud" ? "Cloud AI" : "Model")
+    );
+    const completionTokens = completion.completionTokens;
+    fullReply = completion.text;
 
     fullReply = cleanAssistantReply(fullReply);
 
@@ -2080,11 +2630,11 @@ async function sendMessage() {
       tokensPerSecond: completionTokens ? completionTokens / elapsedSeconds : null
     };
 
-    if (lastGenerationStats.tokensPerSecond) {
+    if (activeInferenceMode === "local" && lastGenerationStats.tokensPerSecond) {
       performanceStatus.textContent =
         `${profile.label} • ${lastGenerationStats.tokensPerSecond.toFixed(1)} tok/s`;
     } else {
-      performanceStatus.textContent = profile.label;
+      performanceStatus.textContent = activeInferenceMode === "cloud" ? `${profile.label} • cloud` : profile.label;
     }
 
     assistantBubble.classList.remove("typing");
@@ -2105,7 +2655,8 @@ async function sendMessage() {
     assistantBubble.textContent = artifact ? `Your ${artifact.label} file is ready.` : fullReply;
     scrollToBottom();
 
-    chat.messages.push({
+    const assistantMessage = {
+      id: createId(),
       role: "assistant",
       content: displayReply,
       modelContent: fullReply,
@@ -2113,7 +2664,9 @@ async function sendMessage() {
       sources: sourceNames,
       tool: artifact ? "File created" : route?.toolName || (retrieved.length ? "File search" : ""),
       artifact
-    });
+    };
+    chat.messages.push(assistantMessage);
+    if (artifact) await putLocalMessageAsset(assistantMessage);
     if (pendingFileIds.length) {
       const analyzedIds = new Set(pendingFileIds);
       for (const message of chat.messages) {
@@ -2139,6 +2692,8 @@ async function sendMessage() {
     renderHeader();
   } catch (error) {
     console.error(error);
+
+    if (isAbortError(error)) generationWasStopped = true;
 
     chat.messages.push({
       role: "assistant",
@@ -2281,6 +2836,7 @@ function shouldReviewAnswer(input) {
 
 function shouldVerifyAnswer(input, profile) {
   if (!shouldReviewAnswer(input)) return false;
+  if (activeInferenceMode === "cloud") return Boolean(profile.verify);
   if (profile.verify) return true;
   if (state.performanceProfile !== "balanced") return false;
 
@@ -2296,8 +2852,7 @@ function shouldVerifyAnswer(input, profile) {
 async function reviewAnswer(input, draft, profile) {
   if (!draft.trim()) return draft;
   try {
-    const result = await engine.chat.completions.create({
-      messages: [
+    const reviewed = await generateOneShotCompletion([
         {
           role: "system",
           content: "You are Picklo's final-answer verifier. Silently inspect the draft for factual overconfidence, contradictions, missed requirements, unsafe advice, calculation errors and incomplete code. Enforce the supplied response contract exactly. Return a corrected final answer only. Preserve correct content and do not mention reviewing, tools, policies or internal reasoning."
@@ -2306,14 +2861,14 @@ async function reviewAnswer(input, draft, profile) {
           role: "user",
           content: `Original request:\n${input}\n\n${buildResponseContract(input, [], null)}\n\nDraft answer:\n${draft}`
         }
-      ],
+      ], {
       temperature: 0.1,
-      top_p: 0.8,
-      max_tokens: Math.min(profile.maxTokens, 1000),
-      stream: false
+      topP: 0.8,
+      maxTokens: Math.min(profile.maxTokens, 1000),
+      purpose: "review"
     });
-    const reviewed = cleanAssistantReply(result?.choices?.[0]?.message?.content || "");
-    return reviewed.trim() || draft;
+    const cleaned = cleanAssistantReply(reviewed);
+    return cleaned.trim() || draft;
   } catch (error) {
     console.warn("Answer verification skipped:", error);
     return draft;
@@ -2326,8 +2881,7 @@ async function repairArtifactIfNeeded(input, request, draft, profile) {
   if (!validationError) return draft;
 
   try {
-    const result = await engine.chat.completions.create({
-      messages: [
+    const repaired = await generateOneShotCompletion([
         {
           role: "system",
           content: `Repair the requested ${request.label}. Return the complete corrected file content only. Do not explain the repair or include placeholders.`
@@ -2336,14 +2890,14 @@ async function repairArtifactIfNeeded(input, request, draft, profile) {
           role: "user",
           content: `Original request:\n${input}\n\nValidation problem:\n${validationError}\n\nDraft file:\n${draft}`
         }
-      ],
+      ], {
       temperature: 0.08,
-      top_p: 0.8,
-      max_tokens: profile.maxTokens,
-      stream: false
+      topP: 0.8,
+      maxTokens: profile.maxTokens,
+      purpose: "repair"
     });
-    const repaired = cleanAssistantReply(result?.choices?.[0]?.message?.content || "");
-    return repaired.trim() || draft;
+    const cleaned = cleanAssistantReply(repaired);
+    return cleaned.trim() || draft;
   } catch (error) {
     console.warn("Artifact repair skipped:", error);
     return draft;
@@ -2387,12 +2941,13 @@ function parseRememberCommand(text) {
 }
 
 async function stopGeneration() {
-  if (!isGenerating || !engine) return;
+  if (!isGenerating) return;
   generationWasStopped = true;
   stopBtn.disabled = true;
   stopBtn.textContent = "Stopping…";
+  cloudAbortController?.abort();
   try {
-    await engine.interruptGenerate();
+    if (engine && activeInferenceMode === "local") await engine.interruptGenerate();
   } catch (error) {
     console.warn("Picklo generation interruption failed:", error);
   }
@@ -2464,6 +3019,10 @@ function renderMemory() {
 }
 
 async function handleFiles(event) {
+  if (!(await ensureRegisteredAccount("upload"))) {
+    event.target.value = "";
+    return;
+  }
   const files = [...(event.target.files || [])];
   event.target.value = "";
   if (!files.length) return;
@@ -2483,6 +3042,8 @@ async function handleFiles(event) {
         type: file.type || file.name.split(".").pop() || "text",
         size: file.size,
         text: cleaned,
+        blob: file,
+        ownerId: currentUser?.id || null,
         createdAt: Date.now()
       };
       await putLocalFile(document);
@@ -2502,12 +3063,15 @@ async function handleFiles(event) {
   localFiles = await listLocalFiles();
   if (uploaded.length) {
     const chat = getActiveChat();
-    chat.messages.push({
+    const attachmentMessage = {
+      id: createId(),
       role: "user",
       content: "",
       attachments: uploaded,
       createdAt: Date.now()
-    });
+    };
+    chat.messages.push(attachmentMessage);
+    await putLocalMessageAsset(attachmentMessage);
     chat.pendingFileIds = [...new Set([...(chat.pendingFileIds || []), ...uploaded.map((file) => file.id)])];
     chat.mode = "analyze";
     chat.updatedAt = Date.now();
@@ -2526,7 +3090,7 @@ async function handleFiles(event) {
     ? `${uploaded.length} document${uploaded.length === 1 ? "" : "s"} uploaded and ready for your next question.`
     : "No readable documents were added.";
   setTimeout(() => {
-    composerNote.textContent = "Chats sync to your account. Models and attached file text stay on this device.";
+    composerNote.textContent = getDefaultComposerNote();
   }, 2500);
 }
 
@@ -2644,11 +3208,17 @@ async function putLocalFile(doc) {
 
 async function listLocalFiles() {
   try {
+    if (!isRegisteredUser()) return [];
+    const ownerId = currentUser.id;
     const db = await openFileDB();
     return await new Promise((resolve, reject) => {
       const tx = db.transaction(FILE_STORE, "readonly");
       const request = tx.objectStore(FILE_STORE).getAll();
-      request.onsuccess = () => resolve((request.result || []).sort((a, b) => b.createdAt - a.createdAt));
+      request.onsuccess = () => resolve(
+        (request.result || [])
+          .filter((file) => file?.ownerId === ownerId)
+          .sort((a, b) => b.createdAt - a.createdAt)
+      );
       request.onerror = () => reject(request.error);
     });
   } catch {
@@ -2657,6 +3227,9 @@ async function listLocalFiles() {
 }
 
 async function deleteLocalFile(id) {
+  if (!isRegisteredUser()) return;
+  const record = localFiles.find((file) => file?.id === id && file?.ownerId === currentUser.id);
+  if (!record) return;
   const db = await openFileDB();
   await new Promise((resolve, reject) => {
     const tx = db.transaction(FILE_STORE, "readwrite");
@@ -2664,6 +3237,9 @@ async function deleteLocalFile(id) {
     tx.oncomplete = () => resolve();
     tx.onerror = () => reject(tx.error);
   });
+  window.dispatchEvent(new CustomEvent("picklo:local-file-deleted", {
+    detail: { name: record.name, size: record.size, ownerId: currentUser.id }
+  }));
 
   localFiles = await listLocalFiles();
   renderFiles();
@@ -3152,7 +3728,7 @@ function showLocalTime() { const now=new Date();localToolOutput.textContent=`${n
 function useFileSearchTool() { closeSheets(); if(!localFiles.length){messageInput.value="I want to search my local files, but I have not added any yet.";} else {setMode("analyze",true);messageInput.value="Search my local files for: ";} autoResize();messageInput.focus(); }
 
 async function regenerateLastAssistant() {
-  if(!engine||isGenerating)return;const chat=getActiveChat();let index=-1;for(let i=chat.messages.length-1;i>=0;i--){if(chat.messages[i].role==="assistant"){index=i;break;}}if(index<0)return;let user=null;for(let i=index-1;i>=0;i--){if(chat.messages[i].role==="user"){user=chat.messages[i];break;}}if(!user)return;chat.messages=chat.messages.slice(0,index);if(chat.messages.at(-1)?.role==="user")chat.messages.pop();saveState();renderMessages();messageInput.value=user.content;autoResize();await sendMessage();
+  if(!currentUser||isGenerating)return;const chat=getActiveChat();let index=-1;for(let i=chat.messages.length-1;i>=0;i--){if(chat.messages[i].role==="assistant"){index=i;break;}}if(index<0)return;let user=null;for(let i=index-1;i>=0;i--){if(chat.messages[i].role==="user"){user=chat.messages[i];break;}}if(!user)return;chat.messages=chat.messages.slice(0,index);if(chat.messages.at(-1)?.role==="user")chat.messages.pop();saveState();renderMessages();messageInput.value=user.content;autoResize();await sendMessage();
 }
 
 async function exportData() {
@@ -3169,7 +3745,7 @@ async function exportData() {
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
-  link.download = `picklo-v8-backup-${new Date().toISOString().slice(0, 10)}.json`;
+  link.download = `picklo-v8.2.2-backup-${new Date().toISOString().slice(0, 10)}.json`;
   document.body.appendChild(link);
   link.click();
   link.remove();
@@ -3202,7 +3778,8 @@ async function importData(event) {
     }
 
     localFiles = await listLocalFiles();
-    populateModels();
+    if (activeInferenceMode === "local") populateModels();
+    else setCloudRuntimeReady();
     setMode(state.activeMode || state.defaultMode || "general", false);
     renderAll();
     closeSheets();
@@ -3242,39 +3819,59 @@ function scrollToBottom(smooth = true) {
 function renderMarkdownInto(container, markdown) {
   container.innerHTML = "";
   const source = String(markdown || "");
+  const plainLanguage = detectPlainCodeLanguage(source);
+  if (!source.includes("```") && plainLanguage) {
+    appendCodeBlock(container, plainLanguage, source);
+    return;
+  }
+
   const fence = /```([^\n`]*)\n?([\s\S]*?)```/g;
   let index = 0;
   let match;
 
   while ((match = fence.exec(source)) !== null) {
     renderTextMarkdown(container, source.slice(index, match.index));
-
-    const block = document.createElement("div");
-    block.className = "code-block";
-
-    const head = document.createElement("div");
-    head.className = "code-head";
-
-    const language = document.createElement("span");
-    language.textContent = (match[1] || "code").trim() || "code";
-
-    const copy = document.createElement("button");
-    copy.type = "button";
-    copy.className = "copy-code";
-    copy.textContent = "Copy";
-
-    const pre = document.createElement("pre");
-    const code = document.createElement("code");
-    code.textContent = match[2].replace(/\n$/, "");
-    pre.appendChild(code);
-
-    head.append(language, copy);
-    block.append(head, pre);
-    container.appendChild(block);
+    appendCodeBlock(container, (match[1] || "code").trim() || "code", match[2].replace(/\n$/, ""));
     index = fence.lastIndex;
   }
 
   renderTextMarkdown(container, source.slice(index));
+}
+
+function appendCodeBlock(container, languageName, value) {
+  const block = document.createElement("div");
+  block.className = "code-block";
+
+  const head = document.createElement("div");
+  head.className = "code-head";
+  const language = document.createElement("span");
+  language.textContent = languageName || "code";
+  const copy = document.createElement("button");
+  copy.type = "button";
+  copy.className = "copy-code";
+  copy.textContent = "Copy";
+
+  const pre = document.createElement("pre");
+  const code = document.createElement("code");
+  code.textContent = String(value || "");
+  pre.appendChild(code);
+  head.append(language, copy);
+  block.append(head, pre);
+  container.appendChild(block);
+}
+
+function detectPlainCodeLanguage(source) {
+  const text = String(source || "").trim();
+  if (text.length < 40 || !text.includes("\n")) return "";
+  if (/<!doctype\s+html|<html\b|<body\b|<style\b|<script\b/i.test(text)) return "html";
+  const tagCount = (text.match(/<\/?[a-z][^>]*>/gi) || []).length;
+  if (tagCount >= 4) return "html";
+  const cssSignals = (text.match(/[.#]?[a-z][\w-]*(?:\s+[.#]?[\w-]+)*\s*\{|[\w-]+\s*:\s*[^;{}]+;/gi) || []).length;
+  if (cssSignals >= 5) return "css";
+  if (/\b(?:const|let|var)\s+[A-Za-z_$]|\bfunction\s+[A-Za-z_$]|=>\s*\{/m.test(text) && (text.match(/[{};]/g) || []).length >= 6) return "javascript";
+  if (/^(?:from\s+\S+\s+import|import\s+\S+|def\s+\w+\s*\(|class\s+\w+\s*:)/m.test(text)) return "python";
+  if (/^(?:SELECT|INSERT|UPDATE|DELETE|CREATE\s+TABLE|ALTER\s+TABLE)\b/im.test(text)) return "sql";
+  return "";
 }
 
 function renderTextMarkdown(container, text) {
@@ -3345,18 +3942,47 @@ function renderTextMarkdown(container, text) {
 }
 
 function appendInline(parent, text) {
-  const regex = /(`[^`]+`|\*\*[^*]+\*\*|__[^_]+__|\*[^*]+\*)/g;
+  const source = String(text || "");
+  const regex = /(\[([^\]]+)\]\s*\((https?:\/\/[^\s)]+|mailto:[^\s)]+)\)|https?:\/\/[^\s<]+|www\.[^\s<]+|[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}|`[^`]+`|\*\*[^*]+\*\*|__[^_]+__|\*[^*]+\*)/gi;
   let index = 0;
   let match;
 
-  while ((match = regex.exec(text)) !== null) {
-    if (match.index > index) {
-      parent.appendChild(document.createTextNode(text.slice(index, match.index)));
-    }
+  while ((match = regex.exec(source)) !== null) {
+    if (match.index > index) parent.appendChild(document.createTextNode(source.slice(index, match.index)));
 
     const token = match[0];
+    const markdownLabel = match[2];
+    const markdownHref = match[3];
 
-    if (token.startsWith("`")) {
+    if (markdownHref || /^https?:\/\//i.test(token) || /^www\./i.test(token) || /^[\w.%+-]+@[\w.-]+\.[a-z]{2,}$/i.test(token)) {
+      const link = document.createElement("a");
+      link.className = "picklo-link";
+      let href = markdownHref || token;
+      let label = markdownLabel || token;
+      let trailing = "";
+
+      if (!markdownHref && !/^[\w.%+-]+@[\w.-]+\.[a-z]{2,}$/i.test(token)) {
+        const cleaned = token.replace(/[.,!?;:]+$/, "");
+        trailing = token.slice(cleaned.length);
+        href = cleaned.startsWith("www.") ? `https://${cleaned}` : cleaned;
+        label = cleaned;
+      } else if (!markdownHref && /^[\w.%+-]+@[\w.-]+\.[a-z]{2,}$/i.test(token)) {
+        href = `mailto:${token}`;
+      }
+
+      if (/^(?:https?:|mailto:)/i.test(href)) {
+        link.href = href;
+        link.textContent = label;
+        if (/^https?:/i.test(href)) {
+          link.target = "_blank";
+          link.rel = "noopener noreferrer";
+        }
+        parent.appendChild(link);
+        if (trailing) parent.appendChild(document.createTextNode(trailing));
+      } else {
+        parent.appendChild(document.createTextNode(token));
+      }
+    } else if (token.startsWith("`")) {
       const code = document.createElement("code");
       code.textContent = token.slice(1, -1);
       parent.appendChild(code);
@@ -3373,7 +3999,6 @@ function appendInline(parent, text) {
     index = regex.lastIndex;
   }
 
-  if (index < text.length) {
-    parent.appendChild(document.createTextNode(text.slice(index)));
-  }
+  if (index < source.length) parent.appendChild(document.createTextNode(source.slice(index)));
 }
+
