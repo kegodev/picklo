@@ -2,31 +2,34 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+  <meta http-equiv="Pragma" content="no-cache" />
+  <meta http-equiv="Expires" content="0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content" />
   <meta name="theme-color" content="#fbfaf8" media="(prefers-color-scheme: light)" />
   <meta name="theme-color" content="#141714" media="(prefers-color-scheme: dark)" />
-  <meta name="description" content="Picklo V8.1 — consistent answers and phone-adaptive private local AI." />
+  <meta name="description" content="Picklo — local AI on capable computers and secure Gemini cloud AI on light devices." />
   <meta name="application-name" content="Picklo" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-title" content="Picklo" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="mobile-web-app-capable" content="yes" />
-  <title>Picklo V8.1</title>
-  <link rel="preconnect" href="https://esm.run" crossorigin />
-  <link rel="preconnect" href="https://huggingface.co" crossorigin />
-  <link rel="modulepreload" href="https://esm.run/@mlc-ai/web-llm" />
+  <title>Picklo</title>
+  <link rel="preconnect" href="https://vciasenjredzlilzqaln.supabase.co" crossorigin />
   <link rel="icon" href="assets/picklo-mark.svg" type="image/svg+xml" />
   <link rel="icon" href="assets/favicon-32.png" sizes="32x32" type="image/png" />
   <link rel="apple-touch-icon" href="assets/apple-touch-icon.png" sizes="180x180" />
-  <link rel="manifest" href="manifest.webmanifest" />
-  <link rel="stylesheet" href="styles.css" />
-  <link rel="modulepreload" href="app.js" />
-  <link rel="modulepreload" href="agent-router.js" />
-  <link rel="modulepreload" href="runtime-policy.js" />
-  <link rel="modulepreload" href="supabase-client.js" />
+  <link rel="manifest" href="manifest.webmanifest?v=8.2.2-fix4" />
+  <link rel="stylesheet" href="styles.css?v=8.2.2-fix4" />
+  <link rel="stylesheet" href="enhancements.css?v=8.2.2-fix4" />
+  <link rel="modulepreload" href="app.js?v=8.2.2-fix4" />
+  <link rel="modulepreload" href="agent-router.js?v=8.2.2-fix4" />
+  <link rel="modulepreload" href="cloud-ai.js?v=8.2.2-fix4" />
+  <link rel="modulepreload" href="runtime-policy.js?v=8.2.2-fix4" />
+  <link rel="modulepreload" href="supabase-client.js?v=8.2.2-fix4" />
 </head>
 <body>
-  <section class="auth-gate" id="authGate" aria-labelledby="authTitle">
+  <section class="auth-gate" id="authGate" aria-labelledby="authTitle" hidden>
     <div class="auth-card">
       <div class="auth-brand">
         <img src="assets/picklo-mark.svg" alt="" />
@@ -34,8 +37,8 @@
       </div>
       <div class="auth-copy">
         <span class="eyebrow">YOUR PERSONAL AI</span>
-        <h1 id="authTitle">Sign in to use Picklo</h1>
-        <p>Your conversations are saved to your private account and follow you across devices.</p>
+        <h1 id="authTitle">Sign in to Picklo</h1>
+        <p>Picklo works without an account. Sign in when you want to attach photos/documents, download generated files, or sync conversations.</p>
       </div>
 
       <div class="auth-tabs" role="tablist" aria-label="Account action">
@@ -54,7 +57,8 @@
         <p class="auth-message" id="authMessage" role="status" aria-live="polite"></p>
       </form>
 
-      <p class="auth-privacy">Messages sync securely. Picklo's AI model and attached file text still run on this device.</p>
+      <button class="auth-guest" id="authGuestBtn" type="button">Continue without account</button>
+      <p class="auth-privacy">Files and photos stay only in this browser. They are never saved to Picklo's backend.</p>
     </div>
   </section>
 
@@ -111,14 +115,14 @@
           <span class="tool-icon settings-tool">
             <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19 12a7.4 7.4 0 0 0-.1-1l2-1.5-2-3.4-2.4 1a7 7 0 0 0-1.8-1L14.4 3h-4.8l-.4 3.1a7 7 0 0 0-1.8 1l-2.4-1-2 3.4L5.1 11a7.4 7.4 0 0 0 0 2L3 14.5l2 3.4 2.4-1a7 7 0 0 0 1.8 1l.4 3.1h4.8l.4-3.1a7 7 0 0 0 1.8-1l2.4 1 2-3.4-2.1-1.5a7.4 7.4 0 0 0 .1-1Z"/></svg>
           </span>
-          <span><strong>Settings</strong><small id="sidebarModelText">Local model</small></span>
+          <span><strong>Settings</strong><small id="sidebarModelText">AI runtime</small></span>
         </button>
 
         <div class="runtime">
           <span class="state-dot" id="stateDot"></span>
           <div>
-            <strong id="stateTitle">Picklo is offline</strong>
-            <small id="stateDetail">Start a model when you are ready</small>
+            <strong id="stateTitle">Checking this device</strong>
+            <small id="stateDetail">Choosing local or cloud AI</small>
           </div>
         </div>
       </div>
@@ -138,13 +142,12 @@
 
           <div class="chat-heading">
             <div class="chat-title-line">
-              <h1 id="headerChatTitle">New chat</h1>
-              <span class="version">V8.1</span>
+              <h1 id="headerChatTitle">Picklo</h1>
             </div>
             <div class="chat-status">
-              <span id="assistantSubtitle">Local, private and ready</span>
+              <span id="assistantSubtitle">Device-adaptive AI</span>
               <i>•</i>
-              <strong id="modelStatus">Starting automatically…</strong>
+              <strong id="modelStatus">Choosing AI runtime…</strong>
               <i>•</i>
               <b id="performanceStatus">Fast</b>
               <i>•</i>
@@ -154,11 +157,6 @@
         </div>
 
         <div class="header-right">
-          <button class="mode-pill" id="modeButton" type="button">
-            <span id="activeModeLabel">General</span>
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m8 10 4 4 4-4"/></svg>
-          </button>
-
           <button class="theme-toggle" id="themeToggleBtn" type="button" aria-label="Switch to dark mode" title="Switch theme">
             <svg class="moon-icon" viewBox="0 0 24 24" aria-hidden="true">
               <path d="M20 15.5A8.5 8.5 0 0 1 8.5 4 8.5 8.5 0 1 0 20 15.5Z"/>
@@ -209,22 +207,11 @@
       </div>
 
       <form class="composer" id="chatForm">
-        <div class="quick-actions" id="quickActions">
-          <button type="button" data-followup="Explain that more simply and keep only the essential points.">Simplify</button>
-          <button type="button" data-followup="Give me a concrete example of what you just explained.">Example</button>
-          <button type="button" data-followup="Go deeper. Explain the important details and tradeoffs I should understand.">Go deeper</button>
-          <button type="button" data-followup="Turn that into a clear step-by-step action plan.">Make steps</button>
-        </div>
-
         <div class="composer-box">
-          <label class="attach" for="fileInput" title="Attach local files">
+          <button class="attach" id="attachButton" type="button" title="Add photo or document" aria-label="Add photo or document">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 12 6.6-6.6a3 3 0 1 1 4.2 4.2l-9.2 9.2a5 5 0 0 1-7.1-7.1l9-9"/></svg>
-            <input id="fileInput" type="file" multiple hidden accept=".pdf,.doc,.docx,.rtf,.txt,.md,.markdown,.csv,.tsv,.json,.html,.css,.js,.mjs,.ts,.jsx,.tsx,.py,.xml,.yaml,.yml,.toml,.ini,.sql,.java,.c,.cpp,.h,.hpp,.cs,.php,.rb,.go,.rs,.swift,.kt,.sh,.svg,.tex,text/*,application/json,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" />
-          </label>
-
-          <button class="composer-tool-button" id="composerToolsBtn" type="button" title="Picklo tools" aria-label="Open Picklo tools">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5h5v5H5zM14 5h5v5h-5zM5 14h5v5H5zM14 14h5v5h-5z"/></svg>
           </button>
+          <input id="fileInput" type="file" multiple hidden accept=".pdf,.doc,.docx,.rtf,.txt,.md,.markdown,.csv,.tsv,.json,.html,.css,.js,.mjs,.ts,.jsx,.tsx,.py,.xml,.yaml,.yml,.toml,.ini,.sql,.java,.c,.cpp,.h,.hpp,.cs,.php,.rb,.go,.rs,.swift,.kt,.sh,.svg,.tex,image/*,text/*,application/json,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" />
 
           <textarea id="messageInput" rows="1" maxlength="16000" placeholder="Start Picklo to send a message…" disabled></textarea>
 
@@ -236,7 +223,7 @@
         </div>
 
         <div class="composer-footer">
-          <span id="composerNote">Chats sync to your account. Models and attached file text stay on this device.</span>
+          <span id="composerNote">Picklo will choose the safest compatible AI runtime for this device.</span>
           <span>Picklo can make mistakes. Check important information.</span>
         </div>
       </form>
@@ -261,14 +248,14 @@
       <div>
         <span class="eyebrow">PICKLO</span>
         <h2 id="settingsTitle">Settings</h2>
-        <p>Model, response mode and local data.</p>
+        <p>AI runtime, response mode and your data.</p>
       </div>
       <button class="sheet-close" data-close-sheet type="button">×</button>
     </header>
     <div class="sheet-body">
       <div class="setting-group account-setting">
-        <span class="field-label">Signed-in account</span>
-        <div class="account-summary">
+        <span class="field-label">Account</span>
+        <div class="account-summary" id="accountSummary">
           <div class="account-avatar" id="settingsAccountInitial">U</div>
           <div><strong id="accountEmail">Signed in</strong><span id="cloudSyncStatus">Loading your conversations…</span></div>
         </div>
@@ -287,17 +274,17 @@
       <div class="setting-group">
         <label class="field-label" for="performanceSelect">Performance</label>
         <select class="select-field" id="performanceSelect">
-          <option value="fast">Fast — quickest capable model</option>
-          <option value="balanced">Balanced — recommended, device adaptive</option>
-          <option value="quality">Quality — strongest with answer verification</option>
+          <option value="fast">Fast — shorter, quickest replies</option>
+          <option value="balanced">Balanced — recommended</option>
+          <option value="quality">Quality — deeper with answer verification</option>
         </select>
-        <p class="help-text">Picklo chooses a phone-friendly model automatically, falls back to a lighter model if memory is tight, and keeps model files cached. Balanced and Quality add targeted answer checks.</p>
+        <p class="help-text" id="performanceHelp">Picklo chooses between local and cloud AI automatically for this device.</p>
       </div>
 
-      <div class="setting-group">
+      <div class="setting-group" id="modelSettingGroup">
         <label class="field-label" for="modelSelect">Local model</label>
         <select class="select-field" id="modelSelect"></select>
-        <p class="help-text">Advanced override. Picklo otherwise selects a model for this device; a manual choice stays selected until you change Performance.</p>
+        <p class="help-text" id="modelHelpText">Advanced local override. A manual choice stays selected until you change Performance.</p>
         <button class="primary-action" id="loadModelBtn" type="button">Switch model now</button>
       </div>
 
@@ -370,7 +357,7 @@
   <section class="sheet tools-sheet hidden" id="toolsSheet" role="dialog" aria-modal="true" aria-labelledby="toolsTitle">
     <div class="sheet-handle"></div>
     <header class="sheet-header">
-      <div><span class="eyebrow">PICKLO V8.1</span><h2 id="toolsTitle">Tools</h2><p>Local utilities that work without a Picklo backend.</p></div>
+      <div><span class="eyebrow">PICKLO</span><h2 id="toolsTitle">Tools</h2><p>Local utilities that work without an AI model.</p></div>
       <button class="sheet-close" data-close-sheet type="button">×</button>
     </header>
     <div class="sheet-body">
@@ -402,7 +389,7 @@
 
       <section class="tool-panel hidden" data-tool-panel="code">
         <div class="tool-panel-title"><div><strong>JavaScript sandbox</strong><span>Runs in an isolated sandboxed iframe.</span></div><button class="tool-run" id="codeRunBtn" type="button">Run</button></div>
-        <textarea class="code-runner-input" id="codeRunnerInput" spellcheck="false">console.log("Hello from Picklo V8.1");
+        <textarea class="code-runner-input" id="codeRunnerInput" spellcheck="false">console.log("Hello from Picklo");
 return 2 + 2;</textarea>
         <pre class="code-output" id="codeOutput">Ready.</pre>
       </section>
@@ -442,7 +429,7 @@ return 2 + 2;</textarea>
         </button>
         <label for="importDataInput">
           <strong>Import Picklo</strong>
-          <span>Restore a Picklo V8.1 JSON backup.</span>
+          <span>Restore a Picklo JSON backup.</span>
           <input id="importDataInput" type="file" hidden accept=".json,application/json" />
         </label>
       </div>
@@ -501,6 +488,61 @@ return 2 + 2;</textarea>
     </div>
   </section>
 
-  <script type="module" src="app.js"></script>
+
+  <script>
+    (() => {
+      const CURRENT_BUILD = "8.2.2-fix4";
+      const VERSION_KEY = "picklo-active-build";
+      const ATTEMPT_PREFIX = "picklo-build-attempt:";
+
+      const updateWorker = async () => {
+        try {
+          const registration = await navigator.serviceWorker?.getRegistration?.();
+          await registration?.update?.();
+        } catch {}
+      };
+
+      const check = async () => {
+        try {
+          const response = await fetch(`./version.json?t=${Date.now()}`, {
+            cache: "no-store",
+            headers: { "Cache-Control": "no-cache" }
+          });
+          if (!response.ok) return;
+          const data = await response.json();
+          const latest = String(data?.version || "").trim();
+          if (!latest) return;
+
+          localStorage.setItem(VERSION_KEY, latest);
+          if (latest === CURRENT_BUILD) {
+            for (let i = sessionStorage.length - 1; i >= 0; i -= 1) {
+              const key = sessionStorage.key(i);
+              if (key?.startsWith(ATTEMPT_PREFIX)) sessionStorage.removeItem(key);
+            }
+            return;
+          }
+
+          await updateWorker();
+          const attemptKey = `${ATTEMPT_PREFIX}${latest}`;
+          const attempts = Number(sessionStorage.getItem(attemptKey) || 0);
+          if (attempts >= 3) return;
+          sessionStorage.setItem(attemptKey, String(attempts + 1));
+
+          const url = new URL(location.href);
+          url.searchParams.set("pv", `${latest}-${Date.now()}`);
+          location.replace(url.href);
+        } catch {}
+      };
+
+      // Check immediately, then whenever Safari returns to Picklo.
+      check();
+      window.addEventListener("pageshow", check);
+      window.addEventListener("focus", check);
+      document.addEventListener("visibilitychange", () => { if (!document.hidden) check(); });
+      setInterval(check, 30000);
+    })();
+  </script>
+  <script type="module" src="app.js?v=8.2.2-fix4"></script>
+  <script type="module" src="enhancements.js?v=8.2.2-fix4"></script>
 </body>
 </html>

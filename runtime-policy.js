@@ -38,23 +38,43 @@ export function detectRuntimeCapabilities(input = {}) {
   const hardwareConcurrency = finitePositive(input.hardwareConcurrency);
   const viewportWidth = finitePositive(input.viewportWidth);
   const userAgent = String(input.userAgent || "");
+  const platform = String(input.platform || "");
   const touchPoints = Number(input.maxTouchPoints) || 0;
-  const mobileUserAgent = /Android|iPhone|iPod|Mobile|Windows Phone/i.test(userAgent);
+  const hasWebGPU = Boolean(input.hasWebGPU);
+  const mobileUserAgent = /Android.*Mobile|iPhone|iPod|Mobile|Windows Phone/i.test(userAgent);
   const narrowTouchDevice = Boolean((input.coarsePointer || touchPoints > 0) && viewportWidth && viewportWidth <= 820);
   const isPhone = mobileUserAgent || narrowTouchDevice;
+  const ipadDesktopUserAgent = /Macintosh/i.test(userAgent) && platform === "MacIntel" && touchPoints > 1;
+  const tabletUserAgent = /iPad|Tablet|PlayBook|Silk/i.test(userAgent) ||
+    (/Android/i.test(userAgent) && !/Mobile/i.test(userAgent));
+  const isTablet = !isPhone && (tabletUserAgent || ipadDesktopUserAgent);
+  const isMobile = isPhone || isTablet;
   const isConstrained = Boolean(
-    (deviceMemory && deviceMemory <= 2) ||
-    (hardwareConcurrency && hardwareConcurrency <= 2)
+    (deviceMemory && deviceMemory <= 4) ||
+    (hardwareConcurrency && hardwareConcurrency <= 4)
   );
+  const supportsLocalAI = Boolean(hasWebGPU && !isMobile && !isConstrained);
 
   return {
     deviceMemory,
     hardwareConcurrency,
     viewportWidth,
+    hasWebGPU,
     isPhone,
+    isTablet,
+    isMobile,
     isConstrained,
-    tier: isConstrained ? "constrained" : isPhone ? "phone" : "desktop"
+    supportsLocalAI,
+    tier: isPhone ? "phone" : isTablet ? "tablet" : isConstrained ? "constrained" : "desktop"
   };
+}
+
+export function selectInferenceMode(capabilities = {}) {
+  if (capabilities.isPhone) return { mode: "cloud", reason: "phone" };
+  if (capabilities.isTablet) return { mode: "cloud", reason: "tablet" };
+  if (!capabilities.hasWebGPU) return { mode: "cloud", reason: "webgpu-unavailable" };
+  if (capabilities.isConstrained) return { mode: "cloud", reason: "limited-hardware" };
+  return { mode: "local", reason: "capable-desktop" };
 }
 
 function nearestAvailableModel(target, availableIds) {

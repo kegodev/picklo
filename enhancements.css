@@ -1,0 +1,322 @@
+:root {
+  --code-keyword: #7c3aed;
+  --code-string: #0f766e;
+  --code-comment: #737373;
+  --code-number: #b45309;
+  --code-tag: #be123c;
+  --code-attr: #1d4ed8;
+  --code-variable: #0369a1;
+  --code-function: #7e22ce;
+  --code-property: #0f766e;
+  --code-selector: #9f1239;
+}
+
+:root[data-theme="dark"] {
+  --code-keyword: #c4b5fd;
+  --code-string: #5eead4;
+  --code-comment: #a3a3a3;
+  --code-number: #fbbf24;
+  --code-tag: #fda4af;
+  --code-attr: #93c5fd;
+  --code-variable: #7dd3fc;
+  --code-function: #d8b4fe;
+  --code-property: #5eead4;
+  --code-selector: #fda4af;
+}
+
+.chat-header .version,
+#modeButton,
+#quickActions,
+#composerToolsBtn,
+.starter-grid {
+  display: none !important;
+}
+
+#headerChatTitle {
+  font-weight: 600 !important;
+}
+
+.picklo-link {
+  color: inherit;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+  overflow-wrap: anywhere;
+}
+
+.message-row.assistant .picklo-link {
+  font-weight: 500;
+}
+
+.code-block code .tok-keyword { color: var(--code-keyword); }
+.code-block code .tok-string { color: var(--code-string); }
+.code-block code .tok-comment { color: var(--code-comment); font-style: italic; }
+.code-block code .tok-number { color: var(--code-number); }
+.code-block code .tok-tag { color: var(--code-tag); }
+.code-block code .tok-attr { color: var(--code-attr); }
+.code-block code .tok-variable { color: var(--code-variable); }
+.code-block code .tok-function { color: var(--code-function); }
+.code-block code .tok-property { color: var(--code-property); }
+.code-block code .tok-selector { color: var(--code-selector); }
+.code-block code .tok-punctuation { opacity: .8; }
+
+.local-attachment-row .message-wrap {
+  max-width: min(78%, 620px);
+}
+
+.local-attachment-bubble {
+  padding: 0 !important;
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+}
+
+.local-image-preview {
+  margin: 0;
+  max-width: min(520px, 76vw);
+  overflow: hidden;
+  border-radius: 18px;
+  border: 1px solid color-mix(in srgb, currentColor 12%, transparent);
+  background: color-mix(in srgb, currentColor 4%, transparent);
+}
+
+.local-image-preview img {
+  display: block;
+  width: 100%;
+  max-height: 520px;
+  object-fit: contain;
+  background: #000;
+}
+
+.local-image-preview figcaption {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 12px;
+  font-size: 12px;
+}
+
+.local-image-preview figcaption strong {
+  font-size: 13px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.local-image-preview figcaption small {
+  opacity: .68;
+}
+
+.local-file-card {
+  min-width: min(360px, 76vw);
+}
+
+.local-file-icon {
+  display: grid;
+  place-items: center;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.local-file-download {
+  flex: 0 0 auto;
+  border: 0;
+  border-radius: 8px;
+  padding: 7px 10px;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  background: color-mix(in srgb, currentColor 9%, transparent);
+  color: inherit;
+}
+
+.local-attachment-row .message-time {
+  display: block;
+  margin: 5px 4px 0 auto;
+  width: max-content;
+}
+
+
+
+/* V8.2.2 fix2 — iOS keyboard-safe composer + explicit attachment button */
+.attach {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+@media (max-width: 760px) {
+  html,
+  body {
+    width: 100%;
+    height: 100%;
+    min-height: 0 !important;
+    max-height: none !important;
+    overflow: hidden !important;
+  }
+
+  #appRoot.app {
+    position: fixed !important;
+    top: var(--picklo-viewport-top, 0px) !important;
+    right: 0 !important;
+    bottom: auto !important;
+    left: 0 !important;
+    width: 100% !important;
+    height: var(--picklo-viewport-height, 100dvh) !important;
+    min-height: 0 !important;
+    max-height: var(--picklo-viewport-height, 100dvh) !important;
+    overflow: hidden !important;
+  }
+
+  .chat-shell {
+    display: flex !important;
+    flex-direction: column !important;
+    width: 100% !important;
+    height: 100% !important;
+    min-height: 0 !important;
+    max-height: 100% !important;
+    overflow: hidden !important;
+  }
+
+  .chat-header {
+    position: relative !important;
+    top: auto !important;
+    flex: 0 0 auto !important;
+  }
+
+  #messages.messages {
+    flex: 1 1 0 !important;
+    min-height: 0 !important;
+    height: auto !important;
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .context-banner {
+    flex: 0 0 auto !important;
+  }
+
+  .composer {
+    position: relative !important;
+    inset: auto !important;
+    flex: 0 0 auto !important;
+    margin: 0 !important;
+    padding: 4px 10px max(8px, env(safe-area-inset-bottom, 0px)) !important;
+    transform: none !important;
+  }
+
+  html[data-keyboard="open"] .composer {
+    padding-bottom: 4px !important;
+  }
+
+  html[data-keyboard="open"] .composer-box {
+    margin-bottom: 0 !important;
+  }
+}
+
+
+/* 8.2.2-fix4 — foreground account screen and guest account affordance */
+.auth-gate {
+  position: fixed !important;
+  inset: 0 !important;
+  z-index: 5000 !important;
+  width: 100vw !important;
+  height: var(--picklo-viewport-height, 100dvh) !important;
+  min-height: 0 !important;
+  max-height: none !important;
+  overflow-y: auto !important;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+.auth-gate:not([hidden]) { display: grid !important; }
+.auth-gate[hidden] { display: none !important; }
+.account-summary.guest-account-link {
+  cursor: pointer;
+  border-radius: 12px;
+  padding: 8px;
+  margin-left: -8px;
+  margin-right: -8px;
+  transition: background .16s ease;
+}
+.account-summary.guest-account-link:hover,
+.account-summary.guest-account-link:focus-visible {
+  background: color-mix(in srgb, currentColor 7%, transparent);
+  outline: none;
+}
+
+/* V8.2.2 fix4 — auth isolation, dark account controls, and mobile stability */
+html[data-auth="open"],
+html[data-auth="open"] body {
+  overflow: hidden !important;
+}
+
+html[data-auth="open"] #appRoot {
+  display: none !important;
+  pointer-events: none !important;
+}
+
+.auth-gate {
+  left: 0 !important;
+  right: 0 !important;
+  top: var(--picklo-viewport-top, 0px) !important;
+  bottom: auto !important;
+  width: 100% !important;
+  height: var(--picklo-viewport-height, 100dvh) !important;
+  max-height: var(--picklo-viewport-height, 100dvh) !important;
+  min-height: 0 !important;
+  z-index: 99999 !important;
+  isolation: isolate;
+  background: var(--bg) !important;
+}
+
+.auth-gate.session-loading .auth-tabs,
+.auth-gate.session-loading .auth-form,
+.auth-gate.session-loading .auth-guest,
+.auth-gate.session-loading .auth-privacy {
+  display: none !important;
+}
+
+.auth-gate.session-loading .auth-card {
+  min-height: 220px;
+  display: grid;
+  align-content: center;
+}
+
+html[data-theme="dark"] .auth-gate {
+  background: #151715 !important;
+}
+
+html[data-theme="dark"] .auth-submit {
+  background: #6c5ce7 !important;
+  color: #ffffff !important;
+}
+
+html[data-theme="dark"] .auth-submit:hover {
+  background: #7868ed !important;
+}
+
+html[data-theme="dark"] .account-avatar,
+html[data-theme="dark"] .account-button {
+  background: #6c5ce7 !important;
+  color: #ffffff !important;
+}
+
+html[data-theme="dark"] .auth-guest {
+  color: #f3f3f3 !important;
+  border-color: #3a3d3a !important;
+}
+
+@media (max-width: 760px) {
+  .auth-gate {
+    place-items: start center !important;
+    padding: max(14px, env(safe-area-inset-top, 0px)) 12px max(18px, env(safe-area-inset-bottom, 0px)) !important;
+  }
+
+  .auth-card {
+    width: min(100%, 520px) !important;
+    margin: 0 !important;
+  }
+}
