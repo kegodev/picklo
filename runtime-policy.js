@@ -70,11 +70,11 @@ export function detectRuntimeCapabilities(input = {}) {
 }
 
 export function selectInferenceMode(capabilities = {}) {
-  if (capabilities.isPhone) return { mode: "cloud", reason: "phone" };
-  if (capabilities.isTablet) return { mode: "cloud", reason: "tablet" };
-  if (!capabilities.hasWebGPU) return { mode: "cloud", reason: "webgpu-unavailable" };
-  if (capabilities.isConstrained) return { mode: "cloud", reason: "limited-hardware" };
-  return { mode: "local", reason: "capable-desktop" };
+  return {
+    mode: "cloud",
+    reason: "gemini-default",
+    localAvailable: Boolean(capabilities.supportsLocalAI)
+  };
 }
 
 function nearestAvailableModel(target, availableIds) {

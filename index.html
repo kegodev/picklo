@@ -8,7 +8,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content" />
   <meta name="theme-color" content="#fbfaf8" media="(prefers-color-scheme: light)" />
   <meta name="theme-color" content="#141714" media="(prefers-color-scheme: dark)" />
-  <meta name="description" content="Picklo — local AI on capable computers and secure Gemini cloud AI on light devices." />
+  <meta name="description" content="Picklo — Gemini-first personal AI with grounded web search, private local attachments, and downloadable files." />
   <meta name="application-name" content="Picklo" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-title" content="Picklo" />
@@ -19,14 +19,14 @@
   <link rel="icon" href="assets/picklo-mark.svg" type="image/svg+xml" />
   <link rel="icon" href="assets/favicon-32.png" sizes="32x32" type="image/png" />
   <link rel="apple-touch-icon" href="assets/apple-touch-icon.png" sizes="180x180" />
-  <link rel="manifest" href="manifest.webmanifest?v=8.2.2-fix4" />
-  <link rel="stylesheet" href="styles.css?v=8.2.2-fix4" />
-  <link rel="stylesheet" href="enhancements.css?v=8.2.2-fix4" />
-  <link rel="modulepreload" href="app.js?v=8.2.2-fix4" />
-  <link rel="modulepreload" href="agent-router.js?v=8.2.2-fix4" />
-  <link rel="modulepreload" href="cloud-ai.js?v=8.2.2-fix4" />
-  <link rel="modulepreload" href="runtime-policy.js?v=8.2.2-fix4" />
-  <link rel="modulepreload" href="supabase-client.js?v=8.2.2-fix4" />
+  <link rel="manifest" href="manifest.webmanifest?v=8.3.0-web" />
+  <link rel="stylesheet" href="styles.css?v=8.3.0-web" />
+  <link rel="stylesheet" href="enhancements.css?v=8.3.0-web" />
+  <link rel="modulepreload" href="app.js?v=8.3.0-web" />
+  <link rel="modulepreload" href="agent-router.js?v=8.3.0-web" />
+  <link rel="modulepreload" href="cloud-ai.js?v=8.3.0-web" />
+  <link rel="modulepreload" href="runtime-policy.js?v=8.3.0-web" />
+  <link rel="modulepreload" href="supabase-client.js?v=8.3.0-web" />
 </head>
 <body>
   <section class="auth-gate" id="authGate" aria-labelledby="authTitle" hidden>
@@ -122,7 +122,7 @@
           <span class="state-dot" id="stateDot"></span>
           <div>
             <strong id="stateTitle">Checking this device</strong>
-            <small id="stateDetail">Choosing local or cloud AI</small>
+            <small id="stateDetail">Starting Gemini web intelligence</small>
           </div>
         </div>
       </div>
@@ -145,7 +145,7 @@
               <h1 id="headerChatTitle">Picklo</h1>
             </div>
             <div class="chat-status">
-              <span id="assistantSubtitle">Device-adaptive AI</span>
+              <span id="assistantSubtitle">Web intelligence</span>
               <i>•</i>
               <strong id="modelStatus">Choosing AI runtime…</strong>
               <i>•</i>
@@ -278,7 +278,7 @@
           <option value="balanced">Balanced — recommended</option>
           <option value="quality">Quality — deeper with answer verification</option>
         </select>
-        <p class="help-text" id="performanceHelp">Picklo chooses between local and cloud AI automatically for this device.</p>
+        <p class="help-text" id="performanceHelp">Gemini is the default on every device and can use Google Search for current information.</p>
       </div>
 
       <div class="setting-group" id="modelSettingGroup">
@@ -491,7 +491,7 @@ return 2 + 2;</textarea>
 
   <script>
     (() => {
-      const CURRENT_BUILD = "8.2.2-fix4";
+      const CURRENT_BUILD = "8.3.0-web";
       const VERSION_KEY = "picklo-active-build";
       const ATTEMPT_PREFIX = "picklo-build-attempt:";
 
@@ -542,7 +542,7 @@ return 2 + 2;</textarea>
       setInterval(check, 30000);
     })();
   </script>
-  <script type="module" src="app.js?v=8.2.2-fix4"></script>
-  <script type="module" src="enhancements.js?v=8.2.2-fix4"></script>
+  <script type="module" src="app.js?v=8.3.0-web"></script>
+  <script type="module" src="enhancements.js?v=8.3.0-web"></script>
 </body>
 </html>

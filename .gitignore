@@ -1,0 +1,25 @@
+# Dependencies and generated output
+node_modules/
+coverage/
+dist/
+build/
+
+# Secrets and local environment
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Editors and operating systems
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+
+# Logs and temporary archives
+*.log
+*.tmp
+*.zip
+*.tar.gz

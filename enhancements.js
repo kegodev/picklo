@@ -1,8 +1,7 @@
-import * as webllm from "https://esm.run/@mlc-ai/web-llm";
-import { supabase } from "./supabase-client.js?v=8.2.2-fix4";
-import { requestCloudImageAnalysis } from "./cloud-ai.js?v=8.2.2-fix4";
+import { supabase } from "./supabase-client.js?v=8.3.0-web";
+import { requestCloudImageAnalysis } from "./cloud-ai.js?v=8.3.0-web";
 
-const BUILD_VERSION = "8.2.2-fix4";
+const BUILD_VERSION = "8.3.0-web";
 const LOCAL_DB = "picklo-local-attachments-v1";
 const LOCAL_STORE = "attachments";
 const FILE_DB = "picklo-v3-files";
@@ -10,13 +9,9 @@ const FILE_STORE = "documents";
 const GUEST_STATE_KEY = "picklo-v7-state";
 const USER_STATE_PREFIX = "picklo-v7-state:user:";
 const SYNTHETIC_IMAGE_PREFIX = "picklo-image-";
-const VISION_MODEL = "Phi-3.5-vision-instruct-q4f16_1-MLC";
 const MAX_LOCAL_FILE_BYTES = 24 * 1024 * 1024;
 const MAX_IMAGE_EDGE = 1800;
 
-let visionEngine = null;
-let visionWorker = null;
-let visionLoadPromise = null;
 let syntheticDispatch = false;
 let mutationQueued = false;
 let attachmentCache = new Map();
@@ -147,7 +142,7 @@ function installFetchPrivacyGuard() {
             const hadAttachments = Array.isArray(clean.attachments) && clean.attachments.length > 0;
             clean.attachments = [];
             clean.artifact = null;
-            clean.sources = [];
+            clean.sources = sanitizeSyncedWebSources(clean.sources);
             if (hadArtifact) clean.model_content = null;
             if (hadArtifact || hadAttachments) clean.tool = "";
             return clean;
@@ -167,6 +162,29 @@ function installFetchPrivacyGuard() {
 
     return nativeFetch(input, init);
   };
+}
+
+function sanitizeSyncedWebSources(value) {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set();
+  const sources = [];
+  for (const item of value) {
+    if (!item || typeof item !== "object" || item.kind !== "web") continue;
+    try {
+      const parsed = new URL(String(item.url || ""));
+      if (!["http:", "https:"].includes(parsed.protocol) || seen.has(parsed.href)) continue;
+      seen.add(parsed.href);
+      sources.push({
+        kind: "web",
+        title: String(item.title || parsed.hostname).replace(/\s+/g, " ").trim().slice(0, 100) || parsed.hostname,
+        url: parsed.href
+      });
+      if (sources.length >= 8) break;
+    } catch {
+      // Local filenames and malformed URLs must not leave this browser.
+    }
+  }
+  return sources;
 }
 
 function installVersionListener() {
@@ -300,32 +318,21 @@ async function handleLocalImage(file, { chatId, orderIndex, ownerId }) {
   await putLocalAttachment(record);
   attachmentCache.set(record.id, record);
   renderLocalAttachments();
-  setComposerStatus("Image added locally. Picklo is reading it on this device…");
+  setComposerStatus("Image added locally. Gemini is reading a temporary resized copy…");
 
   let analysis = "";
   let method = "";
 
-  if (isVisionCapableDesktop()) {
-    try {
-      analysis = await analyzeWithVision(file);
-      method = "local vision model";
-    } catch (error) {
-      console.warn("Local vision model unavailable, trying OCR:", error);
-    }
-  }
-
-  if (!analysis.trim()) {
-    try {
-      const cloudImage = await prepareImageForCloud(file);
-      const result = await requestCloudImageAnalysis({
-        dataUrl: cloudImage,
-        prompt: "Describe this image accurately and in enough detail for another assistant to answer follow-up questions. Include visible text, people, objects, layout, colours, quantities, charts and relevant spatial relationships. Do not guess hidden details."
-      });
-      analysis = String(result?.text || "").trim();
-      if (analysis) method = "secure vision analysis";
-    } catch (error) {
-      console.warn("Secure image analysis unavailable, trying OCR:", error);
-    }
+  try {
+    const cloudImage = await prepareImageForCloud(file);
+    const result = await requestCloudImageAnalysis({
+      dataUrl: cloudImage,
+      prompt: "Describe this image accurately and in enough detail for another assistant to answer follow-up questions. Include visible text, people, objects, layout, colours, quantities, charts and relevant spatial relationships. Do not guess hidden details."
+    });
+    analysis = String(result?.text || "").trim();
+    if (analysis) method = "Gemini vision";
+  } catch (error) {
+    console.warn("Secure image analysis unavailable, trying OCR:", error);
   }
 
   if (!analysis.trim()) {
@@ -341,15 +348,13 @@ async function handleLocalImage(file, { chatId, orderIndex, ownerId }) {
   }
 
   if (!analysis.trim()) {
-    analysis = isVisionCapableDesktop()
-      ? "The image is attached locally, but visual analysis could not start on this device. Do not infer details that are not visible in the user prompt."
-      : "The image is attached locally. This phone/tablet or low-resource device is not loading Picklo's large vision model. No reliable visual description was produced; do not invent image contents.";
+    analysis = "The image is attached locally, but visual analysis was unavailable. Do not infer details that are not visible in the user's message.";
     method = "local attachment only";
   }
 
   record.analysis = analysis;
   record.analysisMethod = method;
-  record.status = method === "local vision model" ? "Analyzed locally" : method === "local OCR" ? "Text read locally" : "Stored locally";
+  record.status = method === "Gemini vision" ? "Analyzed with Gemini" : method === "local OCR" ? "Text read locally" : "Stored locally";
   await putLocalAttachment(record);
   attachmentCache.set(record.id, record);
   renderLocalAttachments();
@@ -382,67 +387,6 @@ function redispatchFilesToPicklo(input, files) {
   } finally {
     syntheticDispatch = false;
   }
-}
-
-function isVisionCapableDesktop() {
-  const ua = navigator.userAgent || "";
-  const mobileFamily = /iPhone|iPad|iPod|Android|Mobile|Tablet/i.test(ua);
-  const compactViewport = Math.min(window.innerWidth, window.innerHeight) < 720;
-  const memory = Number(navigator.deviceMemory || 0);
-  const enoughMemory = !memory || memory >= 8;
-  return Boolean(navigator.gpu) && !mobileFamily && !compactViewport && enoughMemory;
-}
-
-async function analyzeWithVision(file) {
-  if (!visionEngine) {
-    if (!visionLoadPromise) {
-      visionLoadPromise = (async () => {
-        setComposerStatus("Starting Picklo's local vision model…");
-        visionWorker = new Worker("./webllm-worker.js", { type: "module", name: "picklo-vision" });
-        visionEngine = await webllm.CreateWebWorkerMLCEngine(
-          visionWorker,
-          VISION_MODEL,
-          {
-            appConfig: { ...webllm.prebuiltAppConfig, cacheBackend: "cache" },
-            initProgressCallback: (report) => {
-              const pct = typeof report?.progress === "number" ? ` ${Math.round(report.progress * 100)}%` : "";
-              setComposerStatus(`Starting local vision${pct}…`);
-            }
-          },
-          { context_window_size: 4096 }
-        );
-        return visionEngine;
-      })().catch((error) => {
-        visionLoadPromise = null;
-        visionEngine = null;
-        visionWorker?.terminate();
-        visionWorker = null;
-        throw error;
-      });
-    }
-    await visionLoadPromise;
-  }
-
-  const dataUrl = await fileToDataUrl(file);
-  const response = await visionEngine.chat.completions.create({
-    stream: false,
-    temperature: 0.05,
-    max_tokens: 700,
-    messages: [
-      {
-        role: "user",
-        content: [
-          {
-            type: "text",
-            text: "Analyze this image carefully for a second AI assistant. Describe the important visible content, layout, people or objects, diagrams, UI, tables and charts. Read all legible text as accurately as possible. Distinguish clearly visible facts from uncertainty. Do not invent unreadable text or hidden details. Return a compact but information-dense description."
-          },
-          { type: "image_url", image_url: { url: dataUrl } }
-        ]
-      }
-    ]
-  });
-
-  return String(response?.choices?.[0]?.message?.content || await visionEngine.getMessage() || "").trim();
 }
 
 async function prepareImageForCloud(file) {

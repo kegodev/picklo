@@ -1,7 +1,7 @@
 {
   "name": "Picklo",
   "short_name": "Picklo",
-  "description": "Picklo \u2014 local AI on capable computers and secure Gemini cloud AI on light devices.",
+  "description": "Picklo \u2014 Gemini-first personal AI with grounded web search and private local attachments.",
   "id": "./",
   "start_url": "./",
   "scope": "./",
